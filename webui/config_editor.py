@@ -1067,9 +1067,15 @@ def _format_env_value(value, vtype: str) -> str:
             value = value.strip().lower() in ("true", "1", "yes", "on", "y")
         return "True" if value else "False"
     if vtype == "int":
-        return str(int(value))
+        try:
+            return str(int(value))
+        except (TypeError, ValueError):
+            return "0"
     if vtype == "float":
-        return repr(float(value))
+        try:
+            return repr(float(value))
+        except (TypeError, ValueError):
+            return "0.0"
     if vtype == "list_str_multiline":
         lines = _normalize_config_value(value, vtype)
         return "\n".join(lines) if lines else "[]"

@@ -121,5 +121,22 @@ class ConfigDefaultFallbackTests(unittest.TestCase):
                 )
 
 
+    def test_format_env_value_resilience(self):
+        self.assertEqual(config_editor._format_env_value(None, "int"), "0")
+        self.assertEqual(config_editor._format_env_value("", "int"), "0")
+        self.assertEqual(config_editor._format_env_value("invalid", "int"), "0")
+        self.assertEqual(config_editor._format_env_value(4, "int"), "4")
+        self.assertEqual(config_editor._format_env_value(None, "float"), "0.0")
+        self.assertEqual(config_editor._format_env_value("", "float"), "0.0")
+        self.assertEqual(config_editor._format_env_value("invalid", "float"), "0.0")
+        self.assertEqual(config_editor._format_env_value(1.5, "float"), "1.5")
+
+    def test_feature_switch_group_contains_non_bool_fields(self):
+        fields = {field["key"]: field for field in config_editor.EDITABLE_FIELDS if field.get("group") == "功能开关"}
+        self.assertEqual(fields["TWOFA_WORKERS"]["type"], "int")
+        self.assertEqual(fields["TWOFA_QUEUE_LIMIT"]["type"], "int")
+        self.assertEqual(fields["ENABLE_CODEX_AUTO"]["type"], "bool")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -157,18 +157,37 @@ def _normalize_domains(raw) -> list[str]:
 
 
 def _default_domains() -> list[str]:
-    return _normalize_domains(getattr(_email_cfg, "CLOUDFLARE_DEFAULT_DOMAINS", []) or [])
+    domains = _normalize_domains(getattr(_email_cfg, "CLOUDFLARE_DEFAULT_DOMAINS", []) or [])
+    if not domains:
+        # 内存配置为空时，尝试从 .env 动态重读（避免外部修改 .env 后因进程未重启而落空）
+        try:
+            from pathlib import Path
+            env_file = Path(__file__).resolve().parent.parent / ".env"
+            if env_file.exists():
+                for line in env_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+                    line = line.strip()
+                    if line.startswith("CLOUDFLARE_DEFAULT_DOMAINS="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        domains = _normalize_domains(val)
+                        if domains:
+                            break
+        except Exception:
+            pass
+    return domains
 
 
 def _next_domain() -> str:
     domains = _default_domains()
     if not domains:
         return ""
+    # 优先使用子域名（至少含两个点，例如 mail.anyitmr.com）
+    subdomains = [d for d in domains if d.count(".") >= 2]
+    pool = subdomains if subdomains else domains
     global _DOMAIN_COUNTER
     with _DOMAIN_LOCK:
-        domain = domains[_DOMAIN_COUNTER % len(domains)]
+        idx = (_DOMAIN_COUNTER + secrets.randbelow(len(pool))) % len(pool)
         _DOMAIN_COUNTER += 1
-    return domain
+        return pool[idx]
 
 
 def _generate_local(length: int | None = None) -> str:
@@ -189,17 +208,23 @@ def _request(
     url = _base_url() + _normalize_path(path, path or "/")
     headers = _build_headers(content_type=content_type or json_body is not None, bearer_jwt=bearer_jwt)
     query = _auth_params(params)
-    try:
-        response = requests.request(
-            method.upper(),
-            url,
-            headers=headers,
-            json=json_body,
-            params=query or None,
-            timeout=_timeout(),
-        )
-    except requests.RequestException as exc:
-        raise CFTempMailError(f"Cloudflare 请求失败 ({path}): {type(exc).__name__}: {exc}") from exc
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            response = requests.request(
+                method.upper(),
+                url,
+                headers=headers,
+                json=json_body,
+                params=query or None,
+                timeout=_timeout(),
+            )
+            break
+        except requests.RequestException as exc:
+            if attempt < max_retries:
+                time.sleep(1.0)
+                continue
+            raise CFTempMailError(f"Cloudflare 请求失败 ({path}): {type(exc).__name__}: {exc}") from exc
 
     try:
         payload = response.json()

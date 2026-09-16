@@ -1085,48 +1085,150 @@ def _submit_email_and_wait_next(
     raise RuntimeError(f"邮箱提交后未进入密码页/验证码页，最后状态={last_state}")
 
 
-def _type_otp(driver, code: str) -> None:
+def _type_otp(driver, code: str, timeout: int = 12) -> None:
+    """填写邮箱验证码（支持单输入框与 6 分格框，双模输入：拟人击键 + JS 兜底）。"""
     from selenium.webdriver.common.by import By
 
-    # 单输入框
-    for selector in [
-        "input[autocomplete='one-time-code']",
-        "input[name='code']",
-        "input[inputmode='numeric']",
-        "input[type='tel']",
-    ]:
-        els = [e for e in driver.find_elements(By.CSS_SELECTOR, selector) if _visible(e)]
-        if len(els) == 1:
-            _human_type_text(driver, els[0], code, clear=True)
-            return
+    code = str(code or "").strip()
+    if not code:
+        raise RuntimeError("待输入的 OTP 为空")
 
-    # 6 个分格输入框
-    boxes = [e for e in driver.find_elements(By.CSS_SELECTOR, "input") if _visible(e)]
-    numeric_boxes = []
-    for e in boxes:
-        attrs = " ".join(str(e.get_attribute(k) or "") for k in ("inputmode", "autocomplete", "aria-label", "name", "id", "type"))
-        if any(x in attrs.lower() for x in ("numeric", "one-time", "code", "otp", "tel")):
-            numeric_boxes.append(e)
-    if len(numeric_boxes) >= len(code):
-        for e, ch in zip(numeric_boxes, code):
-            if _browser_actions_enabled():
-                _human_scroll_to(driver, e)
-                time.sleep(random.uniform(0.04, 0.18))
-            e.send_keys(ch)
-            if _browser_actions_enabled():
-                human_delay("keystroke")
-        return
+    end = time.time() + timeout
+    last_err = None
 
-    raise RuntimeError("找不到 OTP 输入框")
+    while time.time() < end:
+        try:
+            # 1. 单输入框检测（覆盖 one-time-code / name / id / aria-label / placeholder 等）
+            for selector in [
+                "input[autocomplete='one-time-code']",
+                "input[name='code']",
+                "input[name='otp']",
+                "input[id*='code' i]",
+                "input[id*='otp' i]",
+                "input[placeholder*='code' i]",
+                "input[placeholder*='验证码']",
+                "input[placeholder*='驗證碼']",
+                "input[placeholder*='コード']",
+                "input[aria-label*='code' i]",
+                "input[aria-label*='digit' i]",
+                "input[aria-label*='验证码']",
+                "input[aria-label*='驗證碼']",
+                "input[aria-label*='コード']",
+                "input[inputmode='numeric']",
+                "input[type='tel']",
+                "input[maxlength='6']",
+            ]:
+                els = [e for e in driver.find_elements(By.CSS_SELECTOR, selector) if _visible(e)]
+                if len(els) == 1:
+                    target = els[0]
+                    typed_ok = False
+                    try:
+                        _human_type_text(driver, target, code, clear=True)
+                        val = str(target.get_attribute("value") or "").strip()
+                        if val == code:
+                            typed_ok = True
+                    except Exception as type_exc:
+                        last_err = type_exc
+
+                    if not typed_ok:
+                        driver.execute_script(r"""
+                        const el = arguments[0];
+                        const val = arguments[1];
+                        el.scrollIntoView({block: 'center'});
+                        el.focus();
+                        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+                        if (setter) setter.call(el, val); else el.value = val;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        """, target, code)
+                    return
+                elif len(els) > 1:
+                    single_candidates = [
+                        e for e in els
+                        if (e.get_attribute("maxlength") or "99") not in ("1", "2")
+                    ]
+                    if len(single_candidates) == 1:
+                        target = single_candidates[0]
+                        _human_type_text(driver, target, code, clear=True)
+                        return
+
+            # 2. 6 个分格输入框
+            boxes = [e for e in driver.find_elements(By.CSS_SELECTOR, "input") if _visible(e)]
+            numeric_boxes = []
+            for e in boxes:
+                attrs = " ".join(str(e.get_attribute(k) or "") for k in ("inputmode", "autocomplete", "aria-label", "name", "id", "type", "data-index"))
+                if any(x in attrs.lower() for x in ("numeric", "one-time", "code", "otp", "tel", "digit")):
+                    numeric_boxes.append(e)
+            if len(numeric_boxes) >= len(code):
+                for e, ch in zip(numeric_boxes, code):
+                    if _browser_actions_enabled():
+                        _human_scroll_to(driver, e)
+                        time.sleep(random.uniform(0.03, 0.12))
+                    try:
+                        e.send_keys(ch)
+                    except Exception:
+                        driver.execute_script(r"""
+                        const el = arguments[0];
+                        const ch = arguments[1];
+                        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+                        if (setter) setter.call(el, ch); else el.value = ch;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        """, e, ch)
+                    if _browser_actions_enabled():
+                        human_delay("keystroke")
+                return
+
+            # 3. DOM 直接查找兜底（解决 Selenium _visible 判定偏差）
+            js_found = driver.execute_script(r"""
+            const code = arguments[0];
+            const inputs = [...document.querySelectorAll('input')].filter(el => {
+              const r = el.getBoundingClientRect();
+              return (r.width > 0 || r.height > 0) && !el.disabled && el.type !== 'hidden';
+            });
+            const otpInput = inputs.find(el => {
+              const attrs = [el.name, el.id, el.autocomplete, el.placeholder, el.getAttribute('aria-label'), el.type, el.inputMode].join(' ').toLowerCase();
+              return /one-time|otp|\bcode\b|numeric|digit/.test(attrs);
+            });
+            if (otpInput && (otpInput.maxLength === -1 || otpInput.maxLength >= 6)) {
+              otpInput.scrollIntoView({block: 'center'});
+              otpInput.focus();
+              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+              if (setter) setter.call(otpInput, code); else otpInput.value = code;
+              otpInput.dispatchEvent(new Event('input', {bubbles: true}));
+              otpInput.dispatchEvent(new Event('change', {bubbles: true}));
+              return true;
+            }
+            return false;
+            """, code)
+            if js_found:
+                return
+
+        except Exception as exc:
+            last_err = exc
+
+        time.sleep(0.5)
+
+    state = _email_otp_page_state(driver)
+    current_url = getattr(driver, "current_url", "") or state.get("url") or ""
+    page_text = (state.get("text") or "")[:200].replace("\n", " ")
+    inputs_info = [
+        f"{i.get('type')}:{i.get('name')}:{i.get('id')}:{i.get('autocomplete')}"
+        for i in (state.get("inputs") or [])
+    ]
+    raise RuntimeError(
+        f"找不到 OTP 输入框 (url={current_url}, inputs={inputs_info}, text={page_text}, err={last_err})"
+    )
 
 
 def _email_otp_page_state(driver) -> dict:
     try:
         return driver.execute_script(r"""
-        const visible = el => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+        const visible = el => !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length || el.getAttribute('autocomplete') === 'one-time-code' || el.getAttribute('name') === 'code'));
         const inputs = [...document.querySelectorAll('input')].filter(visible).map(el => ({
           type: el.getAttribute('type') || '', name: el.getAttribute('name') || '', id: el.id || '',
           autocomplete: el.getAttribute('autocomplete') || '', inputmode: el.getAttribute('inputmode') || '',
+          placeholder: el.getAttribute('placeholder') || '', ariaLabel: el.getAttribute('aria-label') || '',
           ariaInvalid: el.getAttribute('aria-invalid') || '', value: el.value || ''
         }));
         const buttons = [...document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')].filter(visible).map(el => ({
@@ -1148,17 +1250,41 @@ def _is_email_verification_page(driver) -> bool:
         url = str(driver.current_url or '').lower()
     except Exception:
         url = ''
-    if '/log-in/password' in url:
-        return False
     state = _email_otp_page_state(driver)
-    has_text = bool(str(state.get("text") or "").strip())
-    has_inputs = bool(state.get("inputs"))
-    if not has_text and not has_inputs:
+    state_url = str(state.get("url") or '').lower()
+    full_url = f"{url} {state_url}"
+    if '/log-in/password' in full_url:
         return False
-    if "email-verification" in url:
+    if "email-verification" in full_url or "/email_verification" in full_url:
         return True
-    attrs = ' '.join(' '.join(str(i.get(k) or '') for k in ('type','name','id','autocomplete','inputmode')) for i in (state.get('inputs') or [])).lower()
-    return 'one-time-code' in attrs or 'otp' in attrs or 'code' in attrs
+
+    text = str(state.get("text") or "").lower()
+    otp_text_patterns = [
+        "check your inbox",
+        "enter the verification code",
+        "verification code",
+        "enter the code",
+        "code we just sent",
+        "查看您的收件箱",
+        "查看您的收件匣",
+        "输入验证码",
+        "輸入驗證碼",
+        "验证码",
+        "驗證碼",
+        "受信トレイを確認",
+        "確認コードを入力",
+        "確認コード",
+        "認証コード",
+        "resend email",
+        "重新发送电子邮件",
+        "重新发送",
+        "再送信",
+    ]
+    if any(p in text for p in otp_text_patterns):
+        return True
+
+    attrs = ' '.join(' '.join(str(i.get(k) or '') for k in ('type','name','id','autocomplete','inputmode','placeholder','ariaLabel')) for i in (state.get('inputs') or [])).lower()
+    return 'one-time-code' in attrs or 'otp' in attrs or 'code' in attrs or 'digit' in attrs
 
 
 def _clear_otp_inputs(driver) -> None:
@@ -1751,15 +1877,31 @@ def _fill_password_page_if_present(driver, email: str, timeout: int = 25) -> str
     """邮箱提交后兼容 create-account/password。返回本次设置的 OpenAI 账号密码；未遇到密码页返回 None。"""
     end = time.time() + timeout
     last = {}
+    clicked_continue_password = False
     while time.time() < end:
         if _is_email_verification_page(driver):
-            result = _click_continue_with_password_if_present(driver)
-            if result.get("ok"):
-                logger.info("%s 邮箱验证码页已点击“使用密码继续”：email=%s detail=%s", _log_prefix(driver), email, result)
+            if not clicked_continue_password:
+                result = _click_continue_with_password_if_present(driver)
+                if result.get("ok"):
+                    logger.info("%s 邮箱验证码页已点击“使用密码继续”：email=%s detail=%s", _log_prefix(driver), email, result)
+                    clicked_continue_password = True
+                    # 关键修复：点击后循环等待页面离开验证码页或进入密码页，决不能在 0.8s 内立即 return None
+                    wait_pwd_end = time.time() + 10
+                    while time.time() < wait_pwd_end:
+                        if _is_signup_password_page(driver):
+                            break
+                        if _has_access_token(driver):
+                            return None
+                        time.sleep(0.5)
+                    continue
+                logger.info("%s 已在邮箱验证码页，但未找到“使用密码继续”按钮：detail=%s", _log_prefix(driver), result)
+                return None
+            else:
+                # 已经点击过“使用密码继续”，稍作等待确认页面是否切到密码页
                 time.sleep(0.8)
-                continue
-            logger.info("%s 已在邮箱验证码页，但未找到“使用密码继续”按钮：detail=%s", _log_prefix(driver), result)
-            return None
+                if not _is_signup_password_page(driver):
+                    logger.info("%s 点击“使用密码继续”后等待超时，页面未跳转密码页，平滑降级回退到 OTP 流程", _log_prefix(driver))
+                    return None
         if _has_access_token(driver):
             return None
         last = _password_page_state(driver)
@@ -2275,6 +2417,11 @@ def run_roxy_registration(
                     current_otp = None
                     continue
             logger.info("[Roxy注册][OTP] 收到验证码：%s", current_otp)
+            if _is_signup_password_page(driver):
+                logger.info("[Roxy注册][OTP] 检测到当前页面处于密码设置页，先行自动设置密码...")
+                pwd = _fill_password_page_if_present(driver, email, timeout=15)
+                if pwd:
+                    openai_password = pwd
             _clear_otp_inputs(driver)
             _type_otp(driver, current_otp)
             logger.info("[Roxy注册][OTP] 已填写邮箱验证码")

@@ -7254,16 +7254,17 @@ function renderConfigSectionV2(name, fields) {
   }
   if (name === '功能开关') {
     const preferred = ['ENABLE_CODEX_AUTO', 'ENABLE_2FA', 'ENABLE_FLOW_TRIGGER'];
-    const ordered = preferred
-      .map(k => fields.find(f => f.key === k))
+    const switches = fields.filter(f => f.type === 'bool');
+    const orderedSwitches = preferred
+      .map(k => switches.find(f => f.key === k))
       .filter(Boolean)
-      .concat(fields.filter(f => !preferred.includes(f.key)));
+      .concat(switches.filter(f => !preferred.includes(f.key)));
+    const inputs = fields.filter(f => f.type !== 'bool');
     return `
       <section class="config-section-v2" id="${esc(slug)}" data-config-section="${esc(name)}">
         ${renderConfigSectionHead(name, '')}
-        <div class="config-switches-v2">
-          ${ordered.map(f => renderFeatureSwitchField(f, { withIcon: true })).join('')}
-        </div>
+        ${orderedSwitches.length ? `<div class="config-switches-v2">${orderedSwitches.map(f => renderFeatureSwitchField(f, { withIcon: true })).join('')}</div>` : ''}
+        ${inputs.length ? `<div class="config-section-v2-body">${inputs.map(renderConfigPlainFieldV2).join('')}</div>` : ''}
         <div class="config-section-v2-actions">
           <button type="button" class="btn primary" data-save-config-v2>保存</button>
         </div>
@@ -7490,13 +7491,21 @@ async function saveRoxyWorkspaceSelection() {
 
 function readConfigElementValue(el, f) {
   if (!f) return undefined;
-  if (f.type === 'list_str_multiline') return el.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if (f.type === 'list_str_multiline') return (el.value || '').split('\n').map(s=>s.trim()).filter(Boolean);
   if (f.type === 'bool') {
     if (el.type === 'checkbox') return !!el.checked;
     return el.value === 'true';
   }
-  if (f.type === 'int') return parseInt(el.value || '0', 10);
-  if (f.type === 'float') return parseFloat(el.value || '0');
+  if (f.type === 'int') {
+    if (el.type === 'checkbox') return el.checked ? 1 : 0;
+    const v = parseInt(String(el.value || '').trim() || '0', 10);
+    return isNaN(v) ? 0 : v;
+  }
+  if (f.type === 'float') {
+    if (el.type === 'checkbox') return el.checked ? 1.0 : 0.0;
+    const v = parseFloat(String(el.value || '').trim() || '0');
+    return isNaN(v) ? 0.0 : v;
+  }
   return isPlaceholderEmpty(el.value) ? '' : el.value.trim();
 }
 

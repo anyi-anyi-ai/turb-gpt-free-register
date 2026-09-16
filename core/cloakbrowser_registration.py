@@ -22,6 +22,7 @@ from core.roxy_registration import (  # noqa: F401
     _safe_get, _maybe_accept, _submit_email_and_wait_next, _fill_password_page_if_present,
     _clear_otp_inputs, _type_otp, _click_continue, _wait_after_email_otp_submit,
     _click_resend_email_otp, _complete_profile_page, _fetch_chatgpt_session, _check_manual_stop,
+    _is_signup_password_page,
 )
 
 logger = logging.getLogger(__name__)
@@ -361,6 +362,11 @@ def _run_cloak_registration_impl(
                     current_otp = None
                     continue
             logger.info("[Cloak注册][OTP] 收到验证码：%s", current_otp)
+            if _is_signup_password_page(driver):
+                logger.info("[Cloak注册][OTP] 检测到当前页面处于密码设置页，先行自动设置密码...")
+                pwd = _fill_password_page_if_present(driver, email, timeout=15)
+                if pwd:
+                    openai_password = pwd
             _clear_otp_inputs(driver)
             _type_otp(driver, current_otp)
             human_delay("otp_input")
