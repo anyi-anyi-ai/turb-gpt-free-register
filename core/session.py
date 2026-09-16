@@ -69,6 +69,7 @@ class BrowserSession:
         self,
         proxy: str = None,
         *,
+        country: str | None = None,
         detect_exit_geo: bool = True,
         device_id: str | None = None,
         auth_session_logging_id: str | None = None,
@@ -82,16 +83,18 @@ class BrowserSession:
 
         Args:
             proxy: 代理地址，如 "socks5h://user:pass@host:port"。
-                   不传则从 config.PROXY_POOL 随机抽一个。
+                   不传则从 config 代理池随机抽一个（支持按 country 抽取）。
                    显式传 "" 表示禁用代理。
+            country: 目标国家代码（如 "US", "CA", "DE" 等），不传按默认策略抽取。
             detect_exit_geo: 是否探测出口 IP 并自动选择语言/时区画像。
                              套餐查询等短请求可关闭，避免额外网络等待。
         """
+        self.target_country = str(country).strip().upper() if country else None
         # proxy=None  → 从池里随机抽（默认行为）
         # proxy=""    → 禁用代理（直连）
         # proxy="..." → 使用指定代理
         if proxy is None:
-            self.proxy = pick_proxy()
+            self.proxy = pick_proxy(country=self.target_country)
         else:
             self.proxy = proxy
 
@@ -288,6 +291,16 @@ class BrowserSession:
             keywords = list(getattr(_browser_cfg, "CLOUD_PROXY_ORG_KEYWORDS", []) or [])
         except Exception:
             return
+        if self.target_country and self.exit_geo:
+            exit_c = str(self.exit_geo.get("country") or "").upper()
+            if exit_c and exit_c != self.target_country:
+                logger.warning(
+                    "[代理] 目标国家为 %s，但出口探测为 %s (ip=%s)，请注意风控影响",
+                    self.target_country,
+                    exit_c,
+                    self.exit_geo.get("ip"),
+                )
+
         if not reject or not self.exit_geo:
             return
         org = str(self.exit_geo.get("org") or "").lower()

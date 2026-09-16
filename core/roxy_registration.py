@@ -19,6 +19,22 @@ from core.email_provider import acquire_email_after_input, wait_for_otp, resolve
 from core.humanize import delay as human_delay
 from core.roxybrowser_client import RoxyBrowserClient, RoxyOpenResult
 
+class AlreadyRegisteredError(Exception):
+    pass
+
+class PageLoadTimeoutError(TimeoutError):
+    pass
+
+def _check_already_verified(snap: dict) -> bool:
+    text = str(snap.get("text") or "").lower()
+    markers = [
+        "already verified", "bereits verifiziert", "déjà vérifié",
+        "ya ha sido verificada", "already registered", "已经验证",
+        "已经注册", "email address verified", "e-mail-adresse verifiziert"
+    ]
+    return any(m in text for m in markers)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -425,7 +441,7 @@ def _email_entry_state(driver) -> dict:
         })).slice(0, 30);
         const actions = [...document.querySelectorAll('button,a,[role=button],input[type=button],input[type=submit]')]
           .filter(visible).map(el => ({tag: el.tagName, type: el.getAttribute('type') || '', attrs: attrText(el)})).slice(0, 40);
-        return {url: location.href, title: document.title, inputs, actions};
+        return {url: location.href, title: document.title, inputs, actions, text: (document.body?.innerText || "").slice(0, 1200)};
         """) or {}
     except Exception as exc:
         return {"url": getattr(driver, "current_url", ""), "error": f"{type(exc).__name__}: {exc}"}
@@ -531,11 +547,13 @@ def _wait_for_email_input(driver, timeout: int | None = None):
     end = time.time() + (timeout or int(_cfg.ROXY_SELENIUM_TIMEOUT))
     last_state = None
     clicked_email_option = False
+    blank_start_time = None
     while time.time() < end:
         el = _find_visible_email_input_js(driver)
         if el:
             return el
         last_state = _email_entry_state(driver)
+        blank_start_time = _handle_blank_page(driver, last_state, blank_start_time)
         if not clicked_email_option and _click_email_entry_option(driver):
             clicked_email_option = True
             time.sleep(1.0)
@@ -945,7 +963,7 @@ def _email_input_value_state(driver) -> dict:
         const inputs = [...document.querySelectorAll('input[type="email"],input[name="email"],input[name="username"],input[autocomplete*="email"]')]
           .filter(visible)
           .map(el => ({type: el.getAttribute('type') || '', name: el.name || '', id: el.id || '', autocomplete: el.getAttribute('autocomplete') || '', value: el.value || ''}));
-        return {url: location.href, inputs};
+        return {url: location.href, inputs, text: (document.body?.innerText || "").slice(0, 1200)};
         """) or {}
     except Exception as exc:
         return {"url": getattr(driver, "current_url", ""), "error": f"{type(exc).__name__}: {exc}"}
@@ -971,6 +989,7 @@ def _wait_email_submit_next_state(driver, email: str, timeout: int = 18) -> str:
     cleared_seen_at: float | None = None
     cleared_last_log_at = 0.0
     cleared_recover_done = False
+    blank_start_time = None
     expected_email = str(email or "").strip().lower()
     while time.time() < end:
         if _has_access_token(driver):
@@ -983,6 +1002,9 @@ def _wait_email_submit_next_state(driver, email: str, timeout: int = 18) -> str:
             return "password"
         state = _email_input_value_state(driver)
         last = state
+        blank_start_time = _handle_blank_page(driver, state, blank_start_time)
+        if _check_already_verified(state):
+            raise AlreadyRegisteredError("检测到邮箱已验证/已注册页面，需重新登录。")
         inputs = state.get("inputs") or []
         if inputs:
             values = [str(i.get("value") or "") for i in inputs]
@@ -1128,9 +1150,13 @@ def _is_email_verification_page(driver) -> bool:
         url = ''
     if '/log-in/password' in url:
         return False
-    if 'email-verification' in url:
-        return True
     state = _email_otp_page_state(driver)
+    has_text = bool(str(state.get("text") or "").strip())
+    has_inputs = bool(state.get("inputs"))
+    if not has_text and not has_inputs:
+        return False
+    if "email-verification" in url:
+        return True
     attrs = ' '.join(' '.join(str(i.get(k) or '') for k in ('type','name','id','autocomplete','inputmode')) for i in (state.get('inputs') or [])).lower()
     return 'one-time-code' in attrs or 'otp' in attrs or 'code' in attrs
 
@@ -1926,6 +1952,7 @@ def _complete_profile_page(driver, name: str, birthday: str, timeout: int = 45) 
     today = date.today()
     age = today.year - int(y) - ((today.month, today.day) < (int(m), int(d)))
     last_snapshot = {}
+    blank_start_time = None
     while time.time() < end:
         time.sleep(1)
         if _has_access_token(driver):
@@ -1933,6 +1960,9 @@ def _complete_profile_page(driver, name: str, birthday: str, timeout: int = 45) 
             return False
         snap = _page_snapshot(driver)
         last_snapshot = snap
+        blank_start_time = _handle_blank_page(driver, snap, blank_start_time)
+        if _check_already_verified(snap):
+            raise AlreadyRegisteredError("检测到邮箱已验证/已注册页面，需重新登录。")
         if not _is_profile_like(snap):
             logger.info('%s 等待资料页中：url=%s', _log_prefix(driver), snap.get('url'))
             continue
@@ -2239,7 +2269,7 @@ def run_roxy_registration(
                         type(exc).__name__,
                         str(exc)[:180],
                     )
-                    otp_after_ts = time.time()
+                    # otp_after_ts = time.time()
                     _click_resend_email_otp(driver, timeout=25)
                     human_delay("api")
                     current_otp = None
@@ -2263,7 +2293,7 @@ def run_roxy_registration(
             if otp_attempt >= max_otp_attempts:
                 raise RuntimeError("邮箱验证码连续错误/过期，已达到最大重试次数")
             logger.warning("[Roxy注册][OTP] 验证码错误/过期，准备重新发送并重新获取验证码（%s/%s）", otp_attempt + 1, max_otp_attempts)
-            otp_after_ts = time.time()
+            # otp_after_ts = time.time()
             _click_resend_email_otp(driver, timeout=25)
             _traffic_checkpoint()
             human_delay("api")
@@ -2391,3 +2421,29 @@ def run_roxy_registration(
                 pass
         if not bool(_cfg.ROXY_KEEP_BROWSER_OPEN):
             client.cleanup_profile(opened)
+
+def _handle_blank_page(driver, state: dict, blank_start_time: float | None, timeout: int = 10) -> float | None:
+    has_text = bool(str(state.get("text") or "").strip())
+    has_inputs = bool(state.get("inputs"))
+    has_buttons = bool(state.get("buttons"))
+    if has_text or has_inputs or has_buttons:
+        if hasattr(driver, "_blank_page_refreshed"):
+            delattr(driver, "_blank_page_refreshed")
+        return None
+    import time
+    now = time.time()
+    if blank_start_time is None:
+        return now
+    elapsed = now - blank_start_time
+    if elapsed > timeout * 2:
+        raise PageLoadTimeoutError(f"页面持续白屏超过 {timeout*2}s")
+    if elapsed > timeout and not getattr(driver, "_blank_page_refreshed", False):
+        logger.warning("%s 页面白屏，尝试刷新...", _log_prefix(driver))
+        try:
+            driver.refresh()
+            driver._blank_page_refreshed = True
+            time.sleep(3)
+        except Exception:
+            pass
+    return blank_start_time
+

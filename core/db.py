@@ -155,6 +155,14 @@ def _ensure_sqlite() -> None:
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS ip_intelligence_cache (
+                ip TEXT PRIMARY KEY,
+                is_residential INTEGER NOT NULL DEFAULT 0,
+                isp TEXT NOT NULL DEFAULT '',
+                org TEXT NOT NULL DEFAULT '',
+                country TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT ''
+            );
         """)
         for table in {"accounts", "email_pool", "registration_jobs"}:
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_status ON {table}(status, id DESC)")
@@ -327,6 +335,84 @@ def _ensure_sqlite() -> None:
         conn.close()
         _SQLITE_READY = True
         _SQLITE_READY_PATH = active_path
+
+
+def get_storage_meta(key: str, default: str = "") -> str:
+    """读取 storage_meta 元数据。"""
+    _ensure_sqlite()
+    with closing(_sqlite_conn()) as conn:
+        row = conn.execute("SELECT value FROM storage_meta WHERE key=? LIMIT 1", (key,)).fetchone()
+        return str(row[0]) if row and row[0] is not None else default
+
+
+def set_storage_meta(key: str, value: str) -> None:
+    """写入 storage_meta 元数据。"""
+    _ensure_sqlite()
+    with closing(_sqlite_conn()) as conn:
+        with conn:
+            conn.execute("INSERT OR REPLACE INTO storage_meta(key, value) VALUES(?, ?)", (key, str(value)))
+
+
+def get_cached_ip_intelligence(ip: str) -> dict | None:
+    """从本地缓存读取 IP 属性（住宅 vs 机房）。"""
+    if not ip:
+        return None
+    _ensure_sqlite()
+    with closing(_sqlite_conn()) as conn:
+        row = conn.execute("SELECT ip, is_residential, isp, org, country, updated_at FROM ip_intelligence_cache WHERE ip=? LIMIT 1", (ip,)).fetchone()
+        if row:
+            return {
+                "ip": row[0],
+                "is_residential": bool(row[1]),
+                "isp": row[2],
+                "org": row[3],
+                "country": row[4],
+                "updated_at": row[5],
+            }
+    return None
+
+
+def save_cached_ip_intelligence(ip: str, is_residential: bool, isp: str = "", org: str = "", country: str = "") -> None:
+    """保存 IP 属性到本地缓存。"""
+    if not ip:
+        return
+    _ensure_sqlite()
+    with closing(_sqlite_conn()) as conn:
+        with conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO ip_intelligence_cache(ip, is_residential, isp, org, country, updated_at) VALUES(?, ?, ?, ?, ?, ?)",
+                (ip, 1 if is_residential else 0, isp or "", org or "", country or "", _now())
+            )
+
+
+def get_proxy_country_weights() -> dict[str, float]:
+    """读取已配置的国家代理百分比权重。"""
+    val = get_storage_meta("proxy_country_weights", "")
+    if val:
+        try:
+            raw = json.loads(val)
+            if isinstance(raw, dict):
+                return {str(k).upper(): float(v) for k, v in raw.items()}
+        except Exception:
+            pass
+    return {}
+
+
+def save_proxy_country_weights(weights: dict[str, float]) -> None:
+    """保存国家代理百分比权重到 storage_meta。"""
+    cleaned = {str(k).upper(): round(float(v), 2) for k, v in weights.items() if float(v) >= 0}
+    set_storage_meta("proxy_country_weights", json.dumps(cleaned, ensure_ascii=False))
+
+
+def is_proxy_residential_only() -> bool:
+    """查询是否启用了纯住宅代理模式（关闭普通干净节点，仅保留住宅节点）。"""
+    val = get_storage_meta("proxy_residential_only", "false")
+    return str(val).strip().lower() in ("true", "1", "yes")
+
+
+def set_proxy_residential_only(enabled: bool) -> None:
+    """设置纯住宅代理模式状态。"""
+    set_storage_meta("proxy_residential_only", "true" if enabled else "false")
 
 
 def _load_collection(collection: str) -> list[dict]:
@@ -527,7 +613,12 @@ def _pool_summary_sql(collection: str) -> dict:
         counts = {str(r["status"] or "available"): int(r["n"]) for r in conn.execute(
             f"SELECT status, COUNT(*) AS n FROM {table}{where} GROUP BY status", params
         )}
-    out = {"available": counts.get("available", 0), "used": counts.get("used", 0), "failed": counts.get("failed", 0)}
+    out = {
+        "available": counts.get("available", 0),
+        "used": counts.get("used", 0),
+        "failed": counts.get("failed", 0),
+        "banned": counts.get("banned", 0),
+    }
     out.update({k: v for k, v in counts.items() if k not in out})
     out["total"] = sum(v for k, v in out.items() if k != "total")
     return out
@@ -738,6 +829,12 @@ def _account_matches_plan_filter(row: dict, plan_filter: str | None = None) -> b
 
 def _decorate_outlook(row: dict, account_by_email: dict[str, dict] | None = None) -> dict:
     out = dict(row)
+    cid = (out.get("client_id") or out.get("clientId") or "").strip()
+    rt = (out.get("refresh_token") or out.get("refreshToken") or "").strip()
+    if (len(cid) > 100 and len(rt) <= 50) or (cid.startswith("M.") and not rt.startswith("M.")):
+        cid, rt = rt, cid
+    out["client_id"] = cid
+    out["refresh_token"] = rt
     out["copy_line"] = _outlook_line(out)
     account = None
     if account_by_email is not None:
@@ -904,6 +1001,8 @@ def insert_account(
     expires_at: str | None = None,
     device_id: str | None = None,
     proxy_used: str | None = None,
+    country: str | None = None,
+    profile_id: str | None = None,
     email_source: str | None = None,
     extra: dict | None = None,
     codex_status: str | None = None,   # success / failed / skipped / missing
@@ -916,6 +1015,12 @@ def insert_account(
         existing = _find_by_email(accounts, email)
         outlook_row = _find_by_email(outlook_rows, email)
         extra_json = json.dumps(extra, ensure_ascii=False) if extra else None
+
+        if country is None and extra:
+            bp = extra.get("browser_profile") or {}
+            country = extra.get("country") or extra.get("geo_country") or bp.get("geo_country")
+        if profile_id is None and extra:
+            profile_id = extra.get("profile_id") or extra.get("roxy_profile_id") or extra.get("cloak_profile_id")
 
         if existing is None:
             row_id = _next_id(accounts)
@@ -937,6 +1042,8 @@ def insert_account(
             "plan_type": plan_type if plan_type is not None else row.get("plan_type"),
             "expires_at": expires_at if expires_at is not None else row.get("expires_at"),
             "proxy_used": proxy_used if proxy_used is not None else row.get("proxy_used"),
+            "country": str(country).strip().upper() if country else row.get("country"),
+            "profile_id": str(profile_id).strip() if profile_id else row.get("profile_id"),
             "email_source": email_source if email_source is not None else row.get("email_source"),
             "extra_json": extra_json if extra_json is not None else row.get("extra_json"),
             "codex_status": codex_status if codex_status is not None else row.get("codex_status"),
@@ -1920,6 +2027,141 @@ def recover_interrupted_totp_setups() -> int:
         return recovered
 
 
+def claim_account_warming(acc_id: int, trigger: str = "manual") -> bool:
+    """原子占用账号养号任务；已有未超时任务时返回 False。"""
+    with _LOCK:
+        rows = _load_accounts()
+        row = next((r for r in rows if int(r.get("id") or 0) == int(acc_id)), None)
+        if row is None:
+            return False
+        current_status = row.get("warming_status")
+        if current_status in {"queued", "running"}:
+            try:
+                stamp_key = "warming_queued_at" if current_status == "queued" else "warming_started_at"
+                stale_after = _PLAN_CHECK_QUEUE_STALE_SECONDS if current_status == "queued" else _PLAN_CHECK_STALE_SECONDS
+                started_at = datetime.fromisoformat(str(row.get(stamp_key) or ""))
+                if (datetime.now() - started_at).total_seconds() < stale_after:
+                    return False
+            except (TypeError, ValueError):
+                pass
+        now = _now()
+        row["warming_status"] = "queued"
+        row["warming_ok"] = False
+        row["warming_trigger"] = str(trigger or "manual")
+        row["warming_queued_at"] = now
+        row["warming_started_at"] = None
+        row["warming_completed_at"] = None
+        row["warming_error"] = None
+        row["updated_at"] = now
+        _save_accounts(rows)
+        return True
+
+
+def mark_account_warming_running(acc_id: int) -> bool:
+    """把账号养号任务标记为运行中。"""
+    with _LOCK:
+        rows = _load_accounts()
+        row = next((r for r in rows if int(r.get("id") or 0) == int(acc_id)), None)
+        if row is None or row.get("warming_status") not in {"queued", "running"}:
+            return False
+        now = _now()
+        row["warming_status"] = "running"
+        row["warming_started_at"] = now
+        row["warming_error"] = None
+        row["updated_at"] = now
+        _save_accounts(rows)
+        return True
+
+
+def update_account_warming_result(acc_id: int, result: dict | None = None) -> bool:
+    """写回账号养号结果：更新活跃时间、养号次数、交互行为、状态与 StorageState。"""
+    result = result or {}
+    with _LOCK:
+        rows = _load_accounts()
+        row = next((r for r in rows if int(r.get("id") or 0) == int(acc_id)), None)
+        if row is None:
+            return False
+
+        now = _now()
+        ok = bool(result.get("ok"))
+        status = str(result.get("status") or ("success" if ok else "failed"))
+        row["warming_status"] = status
+        row["warming_ok"] = ok
+        row["warming_completed_at"] = now
+        row["updated_at"] = now
+        row["warming_error"] = None if ok else result.get("error")
+
+        if ok:
+            row["last_warmed_at"] = now
+            current_count = int(row.get("warm_count") or 0)
+            row["warm_count"] = current_count + 1
+            if result.get("action"):
+                row["last_warm_action"] = result.get("action")
+            if result.get("prompt"):
+                row["last_warm_prompt"] = result.get("prompt")
+            if result.get("dwell_seconds"):
+                row["last_warm_dwell"] = round(float(result.get("dwell_seconds")), 1)
+            row["warming_error"] = None
+        if result.get("storage_state"):
+            row["storage_state"] = result.get("storage_state")
+
+        _save_accounts(rows)
+        return True
+
+
+def recover_interrupted_warmings() -> int:
+    """服务启动时恢复上次进程中断的养号状态。"""
+    with _LOCK:
+        rows = _load_accounts()
+        recovered = 0
+        now = _now()
+        for row in rows:
+            if row.get("warming_status") not in {"queued", "running"}:
+                continue
+            row["warming_status"] = "failed"
+            row["warming_ok"] = False
+            row["warming_error"] = "WebUI 重启导致养号中断，请重新执行"
+            row["warming_completed_at"] = now
+            row["updated_at"] = now
+            recovered += 1
+        if recovered:
+            _save_accounts(rows)
+        return recovered
+
+
+def query_accounts_need_warming(interval_days: int = 3, limit: int = 50) -> list[dict]:
+    """查询达到养号时间要求（超过 interval_days 未养号）的正常账号列表。"""
+    with _LOCK:
+        rows = _load_accounts()
+        candidates = []
+        now = datetime.now()
+        for r in rows:
+            if r.get("archived"):
+                continue
+            # 过滤失败废号
+            if str(r.get("live_check_status") or "").lower() in {"dead", "deactivated", "unusable"}:
+                continue
+            # 过滤正在队列或运行中的账号
+            if str(r.get("warming_status") or "") in {"queued", "running"}:
+                continue
+
+            last_warmed = str(r.get("last_warmed_at") or "").strip()
+            if not last_warmed:
+                candidates.append(r)
+            else:
+                try:
+                    last_dt = datetime.fromisoformat(last_warmed)
+                    if (now - last_dt).total_seconds() >= interval_days * 86400:
+                        candidates.append(r)
+                except Exception:
+                    candidates.append(r)
+
+            if len(candidates) >= limit:
+                break
+        return candidates
+
+
+
 def claim_account_live_check(acc_id: int, trigger: str = "manual") -> bool:
     """原子占用账号查活任务；已有 queued/running 时返回 False。"""
     with _LOCK:
@@ -2145,12 +2387,16 @@ def import_outlook_accounts(records: list[dict]) -> tuple[int, int]:
             if _find_by_email(rows, email):
                 skipped += 1
                 continue
+            cid = (raw.get("client_id") or raw.get("clientId") or "").strip()
+            rt = (raw.get("refresh_token") or raw.get("refreshToken") or "").strip()
+            if (len(cid) > 100 and len(rt) <= 50) or (cid.startswith("M.") and not rt.startswith("M.")):
+                cid, rt = rt, cid
             row = {
                 "id": _next_id(rows),
                 "email": email,
                 "password": (raw.get("password") or "").strip(),
-                "client_id": (raw.get("client_id") or raw.get("clientId") or "").strip(),
-                "refresh_token": (raw.get("refresh_token") or raw.get("refreshToken") or "").strip(),
+                "client_id": cid,
+                "refresh_token": rt,
                 "status": "available",
                 "used_at": None,
                 "note": None,
@@ -2352,7 +2598,7 @@ def release_outlook(email: str, status: str = "available", note: str | None = No
         row["status"] = status
         if status == "available":
             row["used_at"] = None
-        elif status in ("used", "failed", "disabled"):
+        elif status in ("used", "failed", "disabled", "banned"):
             row["used_at"] = row.get("used_at") or _now()
         if note is not None:
             row["note"] = note
@@ -2499,7 +2745,7 @@ def release_generic_api_email(email: str, status: str = "available", note: str |
         row["status"] = status
         if status == "available":
             row["used_at"] = None
-        elif status in ("used", "failed", "disabled"):
+        elif status in ("used", "failed", "disabled", "banned"):
             row["used_at"] = row.get("used_at") or _now()
         if note is not None:
             row["note"] = note
@@ -2601,7 +2847,7 @@ def release_imap_email(email: str, status: str = "available", note: str | None =
         row["status"] = status
         if status == "available":
             row["used_at"] = None
-        elif status in ("used", "failed", "disabled"):
+        elif status in ("used", "failed", "disabled", "banned"):
             row["used_at"] = row.get("used_at") or _now()
         if note is not None:
             row["note"] = note
@@ -2894,8 +3140,9 @@ def codex_accounts_summary() -> dict:
 def _new_job_row(
     rows: list[dict],
     *,
-    email_source: str,
     job_type: str = "registration",
+    email_source: str,
+    country: str | None = None,
     parent_job_id: int | None = None,
     root_job_id: int | None = None,
     retry_attempt: int = 0,
@@ -2910,6 +3157,7 @@ def _new_job_row(
         "id": _next_id(rows),
         "job_uuid": job_uuid,
         "job_type": job_type,
+        "country": str(country).strip().upper() if country else None,
         "parent_job_id": parent_job_id,
         "root_job_id": root_job_id,
         "retry_attempt": int(retry_attempt or 0),
@@ -2927,11 +3175,11 @@ def _new_job_row(
     }
 
 
-def create_job(email_source: str) -> dict:
+def create_job(email_source: str, *, country: str | None = None) -> dict:
     """创建一个首次执行的 pending 注册任务。"""
     with _LOCK:
         rows = _load_jobs()
-        row = _new_job_row(rows, email_source=email_source)
+        row = _new_job_row(rows, email_source=email_source, country=country)
         rows.append(row)
         _save_jobs(rows)
         return dict(row)
@@ -3305,7 +3553,7 @@ def release_domain_email(email: str, status: str = "available", note: str | None
         row["status"] = status
         if status == "available":
             row["used_at"] = None
-        elif status in ("used", "failed", "disabled"):
+        elif status in ("used", "failed", "disabled", "banned"):
             row["used_at"] = row.get("used_at") or _now()
         if note is not None:
             row["note"] = note

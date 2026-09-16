@@ -120,9 +120,8 @@ def _run_generate(*, account_id: int, email: str, access_token: str, trigger: st
         from core.chatgpt_plan import resolve_plan_check_route
         from core.session import BrowserSession
 
-        # 和查套餐一致解析网络路径；每个账号独立创建 BrowserSession，
-        # 从而得到独立 oai-did / oai-session-id / Datadog trace / 浏览器画像 / 代理出口。
-        route = resolve_plan_check_route(None)
+        account = db.get_account(account_id) or {}
+        route = resolve_plan_check_route(None, account=account)
         route_meta = {k: v for k, v in route.items() if k != "proxy"}
         timeout_seconds, attempts, retry_delay = _agent_request_settings()
         last_exc: Exception | None = None

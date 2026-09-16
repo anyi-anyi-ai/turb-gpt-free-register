@@ -2897,11 +2897,17 @@ def run_browser_use_registration(
         try:
             if email:
                 from core.email_provider import release_email
-                release_email(
-                    email,
-                    status="failed" if create_acknowledged else "available",
-                    note=f"BrowserUse注册失败: {str(exc)[:180]}",
-                )
+                from core.openai_auth import detect_account_unusable_text
+                dead_code = detect_account_unusable_text(str(exc))
+                if dead_code:
+                    logger.warning("[BrowserUse][封禁剔除] 邮箱 %s 检测到已被 OpenAI 停用/封禁 (%s)，标记为已封禁并放弃注册", email, dead_code)
+                    release_email(email, status="banned", note=f"GPT已封禁: {dead_code}")
+                else:
+                    release_email(
+                        email,
+                        status="failed" if create_acknowledged else "available",
+                        note=f"BrowserUse注册失败: {str(exc)[:180]}",
+                    )
         except Exception:
             pass
         return {

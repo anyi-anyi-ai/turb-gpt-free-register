@@ -410,7 +410,7 @@ class RoxyBrowserClient:
 
         return {"ok": False, "items": [], "errors": errors}
 
-    def create_profile(self, payload: dict | None = None) -> str:
+    def create_profile(self, payload: dict | None = None, *, country: str | None = None) -> str:
         body = dict(getattr(_cfg, "ROXY_PROFILE_CREATE_PAYLOAD", {}) or {})
         random_name_enabled = bool(getattr(_cfg, "ROXY_RANDOM_PROFILE_NAME_ON_CREATE", True))
         if random_name_enabled:
@@ -440,7 +440,7 @@ class RoxyBrowserClient:
         if bool(getattr(_cfg, "ROXY_CREATE_USE_PROXY_POOL", False)) and not body.get("proxyInfo"):
             from config import proxy as _proxy_cfg
 
-            proxy_url = _proxy_cfg.pick_proxy()
+            proxy_url = _proxy_cfg.pick_proxy(country=country, for_registration=True)
             if proxy_url:
                 proxy_info = _proxy_url_to_roxy_info(proxy_url)
                 body["proxyInfo"] = proxy_info
@@ -488,7 +488,7 @@ class RoxyBrowserClient:
             return ""
         return text
 
-    def open_profile(self, profile_id: str | None = None) -> RoxyOpenResult:
+    def open_profile(self, profile_id: str | None = None, *, country: str | None = None) -> RoxyOpenResult:
         one_profile = bool(getattr(_cfg, "ROXY_ONE_PROFILE_PER_ACCOUNT", True))
         configured_pid = self._normalize_profile_id(profile_id if profile_id is not None else getattr(_cfg, "ROXY_PROFILE_ID", ""))
         if one_profile and configured_pid:
@@ -500,7 +500,7 @@ class RoxyBrowserClient:
         pid = configured_pid
         created_by_run = False
         if not pid:
-            pid = self.create_profile()
+            pid = self.create_profile(country=country)
             created_by_run = True
             logger.info("[Roxy] 已创建临时环境：%s", pid)
 

@@ -10,7 +10,7 @@
 """
 from config.env_loader import apply_env_overrides
 
-ENABLE_2FA = False
+ENABLE_2FA = True
 
 # 发起 reauth（CSRF + signin）时的临时网络错误重试。403 会先清理当前会话的
 # 本地熔断，再按指数退避重试；业务类 4xx 不重试。

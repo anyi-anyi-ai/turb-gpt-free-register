@@ -55,6 +55,13 @@ _FINALIZE_SESSION_BACKOFF_BASE = 2.0
 
 def configure_logging(verbose: bool = False) -> None:
     """配置 CLI 日志：默认简洁，--verbose 时显示完整步骤细节。"""
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(line_buffering=True)
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(line_buffering=True)
+    except Exception:
+        pass
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if verbose else logging.INFO)
     for handler in root.handlers:
@@ -160,6 +167,7 @@ def run_registration(
     name: str,
     birthday: str | None = None,
     proxy: str = None,
+    country: str | None = None,
     otp_code: str = None,
     batch_dir=None,
     on_email_acquired: Callable[[str], None] | None = None,
@@ -176,6 +184,7 @@ def run_registration(
         name: 用户显示名称
         birthday: 生日，格式 YYYY-MM-DD
         proxy: 代理地址（不传则从 PROXY_POOL 随机抽）
+        country: 注册目标国家代码（支持 JP/US/GB 等）
         otp_code: 邮箱验证码（如果为None，会等待手动输入）
     """
     # 可选注册驱动：
@@ -192,6 +201,7 @@ def run_registration(
             name=name,
             birthday=birthday or generate_random_birthday(),
             proxy=proxy,
+            country=country,
             otp_code=otp_code,
             batch_dir=batch_dir,
             on_email_acquired=on_email_acquired,
@@ -203,6 +213,7 @@ def run_registration(
             name=name,
             birthday=birthday or generate_random_birthday(),
             proxy=proxy,
+            country=country,
             otp_code=otp_code,
             batch_dir=batch_dir,
             on_email_acquired=on_email_acquired,
@@ -214,6 +225,7 @@ def run_registration(
             name=name,
             birthday=birthday or generate_random_birthday(),
             proxy=proxy,
+            country=country,
             otp_code=otp_code,
             batch_dir=batch_dir,
             on_email_acquired=on_email_acquired,

@@ -57,6 +57,7 @@ _CONTEXT_CACHE: dict[str, "OutlookAccount"] = {}
 
 # 远端 mail.chatai.codes 被禁用时，本进程内直接跳过远端，走 Microsoft Graph 直连。
 _REMOTE_DISABLED = False
+_REMOTE_IMAP_UNSUPPORTED = False
 _MS_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 _MS_TOKEN_FATAL_CACHE: dict[str, tuple[str, float]] = {}
 
@@ -69,6 +70,19 @@ class OutlookAccount:
     refresh_token: str
     recovery_email: str = ""  # 可选：恢复邮箱
     recovery_code: str = ""   # 可选：恢复码
+
+    def __post_init__(self):
+        cid = (self.client_id or "").strip()
+        rt = (self.refresh_token or "").strip()
+        # 兼容处理：如果 client_id 和 refresh_token 被反向传入
+        # Azure / MSA Client ID 通常为 UUID (36 字符)
+        # MSA Refresh Token 通常为 500+ 字符 (以 M. 开头)
+        if (len(cid) > 100 and len(rt) <= 50) or (cid.startswith("M.") and not rt.startswith("M.")):
+            self.client_id = rt
+            self.refresh_token = cid
+        else:
+            self.client_id = cid
+            self.refresh_token = rt
 
 
 class OutlookClientError(RuntimeError):
@@ -889,7 +903,7 @@ def _fetch_via(session: CurlSession, protocol: str, account: OutlookAccount) -> 
     - direct: Microsoft Graph 直连
     - auto: 远端可用时用远端；远端 402/DEPLOYMENT_DISABLED 后自动直连 Graph
     """
-    global _REMOTE_DISABLED
+    global _REMOTE_DISABLED, _REMOTE_IMAP_UNSUPPORTED
     mode = _outlook_fetch_mode()
 
     if mode in ("direct", "graph", "graph_direct", "msgraph"):
@@ -906,6 +920,9 @@ def _fetch_via(session: CurlSession, protocol: str, account: OutlookAccount) -> 
             return _fetch_imap_direct_messages(account)
         return []
 
+    if protocol == "imap" and _REMOTE_IMAP_UNSUPPORTED:
+        return []
+
     url = f"{OUTLOOK_API_BASE.rstrip('/')}/api/fetch-{protocol}"
     payload = {
         "email":        account.email,
@@ -918,6 +935,11 @@ def _fetch_via(session: CurlSession, protocol: str, account: OutlookAccount) -> 
     try:
         data = _secure_post(session, url, payload)
     except OutlookClientError as exc:
+        if protocol == "imap" and ("IMAP_REQUIRES_CONTAINER" in str(exc) or "501" in str(exc)):
+            if not _REMOTE_IMAP_UNSUPPORTED:
+                _REMOTE_IMAP_UNSUPPORTED = True
+                logger.info("[Outlook] 远端服务不支持 IMAP 运行时，已自动屏蔽远端 IMAP 请求，专注于 Graph 协议")
+            return []
         logger.warning(f"[Outlook] {protocol} 请求失败: {exc}")
         if mode == "auto" and _is_remote_disabled_error(exc):
             _REMOTE_DISABLED = True
@@ -1028,6 +1050,9 @@ def fetch_latest_otp(
                 ts = _parse_email_ts(item) or 0.0
                 source = str(item.get("_fetch_source") or protocol) if isinstance(item, dict) else protocol
                 all_candidates.append((protocol, item, ts, source))
+            # 先试 Graph，Graph 成功拿到邮件后无需再查 IMAP，避免无效网络开销
+            if emails and protocol == "graph":
+                break
 
         # 按时间降序，最新的在前
         all_candidates.sort(key=lambda x: x[2], reverse=True)

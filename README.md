@@ -336,12 +336,25 @@ QQ_IMAP_PASSWORD = "QQ邮箱IMAP授权码"
 
 Cloudflare Email Routing 需要把域名邮件转发到 QQ 邮箱。此模式不调用 Worker 创建接口，仅本地生成地址并通过 QQ IMAP 取件。
 
-#### MailNest-迈巢 Outlook 临时邮箱
+#### MailNest-迈巢 临时邮箱 / 独占邮箱
 
-可直接在 Web-UI 中配置 API Key 与项目代码`MAIL_NEST_PROJECT_CODE`，也可以在配置文件中配置。
+MailNest（[迈巢官方文档](https://mailnest.top/docs/api-overview)）提供面向开发者的临时邮箱与独占邮箱服务，支持自动收件与验证码提取。未成功消费时系统会自动调用平台接口解冻释放资金。
 
-- `api-key`获取页面：https://mailnest.top/account
-- 项目代码获取页面：https://mailnest.top/buy-email。默认为`chatgpt001`，可以直接使用
+可在 WebUI「配置 → 邮箱 / OTP」或 `.env` / `config/email.py` 中配置：
+
+- `MAIL_NEST_API_KEY`：API Key 获取页面：https://mailnest.top/account
+- `MAIL_NEST_MODE`：`temporary`（临时邮箱，默认）或 `exclusive`（独占邮箱）
+- `MAIL_NEST_PROJECT_CODE`：项目代码，默认 `chatgpt001`（临时邮箱模式使用；获取页面：https://mailnest.top/buy-email）
+- `MAIL_NEST_API_BASE`：API 基础地址，默认 `https://mailnest.top`
+
+**连通性与余额测试工具**：
+```bash
+# 检查 API Key 连通性、账户余额与项目库存
+python tools/test_mailnest.py
+
+# 测试购买一个邮箱并主动释放解冻
+python tools/test_mailnest.py --test-buy
+```
 
 #### Remail 开放 API
 

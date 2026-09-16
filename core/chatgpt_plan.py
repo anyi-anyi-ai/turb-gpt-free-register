@@ -76,10 +76,16 @@ def _local_proxy_status(proxy: str) -> tuple[bool, bool, str | None]:
         return False, False, f"代理地址解析失败（{type(exc).__name__}）"
 
 
-def resolve_plan_check_route(explicit_proxy: Optional[str] = None) -> dict:
+def resolve_plan_check_route(
+    explicit_proxy: Optional[str] = None,
+    *,
+    account: dict | None = None,
+    country: str | None = None,
+) -> dict:
     """解析套餐查询的实际网络路径。
 
     explicit_proxy 不是 None 时表示 API 调用方明确覆盖配置；空字符串代表直连。
+    支持传入 account / country 遵循账号同国 / 同 IP 策略。
     """
     if explicit_proxy is not None:
         selected = str(explicit_proxy or "").strip()
@@ -105,7 +111,16 @@ def resolve_plan_check_route(explicit_proxy: Optional[str] = None) -> dict:
             "proxy_fallback_reason": None,
         }
 
-    selected = str(getattr(proxy_cfg, "PLAN_CHECK_PROXY", "") or "").strip()
+    selected = ""
+    if account:
+        try:
+            selected = str(proxy_cfg.pick_proxy_for_account(account) or "").strip()
+        except Exception:
+            selected = ""
+    if not selected and country:
+        selected = str(proxy_cfg.pick_proxy(country=country) or "").strip()
+    if not selected:
+        selected = str(getattr(proxy_cfg, "PLAN_CHECK_PROXY", "") or "").strip()
     if not selected:
         selected = str(proxy_cfg.pick_proxy() or "").strip()
     if not selected:
@@ -338,6 +353,8 @@ def check_account_plan(
     token: str,
     *,
     proxy: Optional[str] = None,
+    account: dict | None = None,
+    country: str | None = None,
     timezone_offset_min: str = "-",
     timeout: float | None = None,
     max_attempts: int | None = None,
@@ -358,7 +375,7 @@ def check_account_plan(
         }
 
     try:
-        route = resolve_plan_check_route(proxy)
+        route = resolve_plan_check_route(proxy, account=account, country=country)
     except Exception as exc:
         return {
             "ok": False,

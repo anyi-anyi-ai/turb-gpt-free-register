@@ -71,6 +71,14 @@ def load_env(*, override: bool = False) -> Path:
     else:
         # 仍然允许系统环境变量生效
         load_dotenv(override=override)
+
+    # 修复 Windows 下 no_proxy/NO_PROXY 含有 ::1 导致 urllib/httpx 报错 Invalid port: ':1'
+    for np_key in ("no_proxy", "NO_PROXY"):
+        val = os.environ.get(np_key)
+        if val and "::1" in val:
+            parts = [p.strip() for p in val.split(",") if p.strip() and not p.strip().startswith("::1")]
+            os.environ[np_key] = ",".join(parts)
+
     _LOADED = True
     return _ENV_PATH
 
@@ -179,6 +187,8 @@ def _coerce_env_value(raw: str, default, vtype: str | None = None):
             vtype = "float"
         elif isinstance(default, (list, tuple)):
             vtype = "list_str_multiline"
+        elif isinstance(default, dict):
+            vtype = "dict_json"
         else:
             vtype = "str"
     if vtype == "bool":
@@ -187,6 +197,20 @@ def _coerce_env_value(raw: str, default, vtype: str | None = None):
         return int(str(raw).strip())
     if vtype == "float":
         return float(str(raw).strip())
+    if vtype in ("dict_json", "json_dict", "dict"):
+        text = str(raw).strip()
+        try:
+            import json
+            return json.loads(text)
+        except Exception:
+            try:
+                import ast
+                val = ast.literal_eval(text)
+                if isinstance(val, dict):
+                    return val
+            except Exception:
+                pass
+            return default
     if vtype == "list_str_multiline":
         text = str(raw)
         # 兼容旧值：PROXY_POOL='["http://..."]'

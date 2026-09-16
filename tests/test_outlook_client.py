@@ -101,6 +101,30 @@ class OutlookClientContextTests(unittest.TestCase):
         get_outlook_by_email.assert_called_once_with("pool@outlook.test")
         get_account_by_email.assert_called_once_with("pool@outlook.test")
 
+    def test_auto_swap_reversed_tokens(self):
+        long_rt = "M.C508_SN1.0.U.MsaArtifacts." + "a" * 400
+        uuid_cid = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
+
+        # Reverse passed: client_id has long_rt, refresh_token has uuid_cid
+        acc = outlook_client.OutlookAccount(
+            email="test@outlook.com",
+            password="pwd",
+            client_id=long_rt,
+            refresh_token=uuid_cid,
+        )
+        self.assertEqual(acc.client_id, uuid_cid)
+        self.assertEqual(acc.refresh_token, long_rt)
+
+        # Correctly passed: keeps as is
+        acc2 = outlook_client.OutlookAccount(
+            email="test@outlook.com",
+            password="pwd",
+            client_id=uuid_cid,
+            refresh_token=long_rt,
+        )
+        self.assertEqual(acc2.client_id, uuid_cid)
+        self.assertEqual(acc2.refresh_token, long_rt)
+
 
 if __name__ == "__main__":
     unittest.main()

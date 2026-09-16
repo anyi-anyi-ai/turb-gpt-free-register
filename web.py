@@ -72,7 +72,73 @@ def _setup_logging(verbose: bool) -> None:
     )
 
 
+def _ensure_interactive_desktop() -> None:
+    """在 Windows 环境下，若当前处于沙箱/后台虚拟桌面，自动桥接至用户交互桌面 WinSta0\\Default。
+    这样 Playwright / CloakBrowser 启动的浏览器窗口可以直接在用户物理显示器上正常弹出。
+    """
+    import sys
+    if sys.platform != "win32":
+        return
+    if "--desktop-forwarded" in sys.argv:
+        sys.argv.remove("--desktop-forwarded")
+        return
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        k = ctypes.windll.kernel32
+        h_desk = u.GetThreadDesktop(k.GetCurrentThreadId())
+        buff = ctypes.create_unicode_buffer(256)
+        u.GetUserObjectInformationW(h_desk, 2, buff, 256, None)
+        cur_desk = buff.value or ""
+        if cur_desk.lower() == "default":
+            return
+
+        class STARTUPINFO(ctypes.Structure):
+            _fields_ = [
+                ('cb', wintypes.DWORD), ('lpReserved', wintypes.LPWSTR), ('lpDesktop', wintypes.LPWSTR),
+                ('lpTitle', wintypes.LPWSTR), ('dwX', wintypes.DWORD), ('dwY', wintypes.DWORD),
+                ('dwXSize', wintypes.DWORD), ('dwYSize', wintypes.DWORD), ('dwXCountChars', wintypes.DWORD),
+                ('dwYCountChars', wintypes.DWORD), ('dwFillAttribute', wintypes.DWORD), ('dwFlags', wintypes.DWORD),
+                ('wShowWindow', wintypes.WORD), ('cbReserved2', wintypes.WORD), ('lpReserved2', ctypes.c_char_p),
+                ('hStdInput', wintypes.HANDLE), ('hStdOutput', wintypes.HANDLE), ('hStdError', wintypes.HANDLE),
+            ]
+
+        class PROCESS_INFORMATION(ctypes.Structure):
+            _fields_ = [('hProcess', wintypes.HANDLE), ('hThread', wintypes.HANDLE), ('dwProcessId', wintypes.DWORD), ('dwThreadId', wintypes.DWORD)]
+
+        si = STARTUPINFO()
+        si.cb = ctypes.sizeof(STARTUPINFO)
+        si.lpDesktop = 'WinSta0\\Default'
+        si.dwFlags = 0x00000100  # STARTF_USESTDHANDLES
+        si.hStdOutput = k.GetStdHandle(-11)
+        si.hStdError = k.GetStdHandle(-12)
+        si.hStdInput = k.GetStdHandle(-10)
+
+        pi = PROCESS_INFORMATION()
+        proj_venv_py = Path(__file__).resolve().parent / ".venv" / "Scripts" / "python.exe"
+        if proj_venv_py.exists():
+            chosen_py = str(proj_venv_py)
+        else:
+            venv_py = Path(sys.prefix) / "Scripts" / "python.exe"
+            chosen_py = str(venv_py) if venv_py.exists() else sys.executable
+        args = [f'"{chosen_py}"'] + [f'"{arg}"' for arg in sys.argv] + ['--desktop-forwarded']
+        cmd_line = " ".join(args)
+        res = k.CreateProcessW(None, cmd_line, None, None, True, 0, None, None, ctypes.byref(si), ctypes.byref(pi))
+        if not res:
+            return
+
+        k.WaitForSingleObject(pi.hProcess, 0xFFFFFFFF)
+        exit_code = wintypes.DWORD()
+        k.GetExitCodeProcess(pi.hProcess, ctypes.byref(exit_code))
+        sys.exit(exit_code.value)
+    except Exception:
+        pass
+
+
 def main() -> None:
+    _ensure_interactive_desktop()
     parser = argparse.ArgumentParser(description="GPT 注册 WebUI 控制台")
     parser.add_argument("--host", default="127.0.0.1", help="绑定地址，默认仅本地 127.0.0.1")
     parser.add_argument("--port", type=int, default=5000, help="端口，默认 5000")

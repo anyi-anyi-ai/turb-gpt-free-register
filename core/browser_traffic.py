@@ -1106,22 +1106,18 @@ class PlaywrightTrafficTracker(_TrafficAccumulator):
                 )
                 continue
 
-            values = self._request_size_values(request) or {}
-            if values:
-                upload = (values.get("requestBodySize") or 0) + (values.get("requestHeadersSize") or 0)
-                download = (values.get("responseBodySize") or 0) + (values.get("responseHeadersSize") or 0)
-                include_response = True
-            else:
-                upload = self._request_fallback_upload(request)
-                download = 0
-                include_response = False
+            # Playwright: Request.sizes() on an unfinished request blocks indefinitely waiting for completion!
+            # For unfinished requests, use fallback upload calculation directly without calling request.sizes().
+            upload = self._request_fallback_upload(request)
+            download = 0
+            include_response = False
             self._record_playwright_detail(
                 request,
                 request_id=key,
                 upload_bytes=upload,
                 download_bytes=download,
-                response_body_bytes=values.get("responseBodySize") or 0,
-                response_header_bytes=values.get("responseHeadersSize") or 0,
+                response_body_bytes=0,
+                response_header_bytes=0,
                 unfinished=True,
                 include_response=include_response,
             )

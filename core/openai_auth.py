@@ -45,26 +45,94 @@ _ACCOUNT_DEAD_CODES = frozenset({
 })
 
 _ACCOUNT_DEAD_TEXT_MARKERS = (
+    # 英文标记
     "account_deactivated",
     "account_deleted",
     "account_banned",
+    "account_disabled",
+    "account_suspended",
+    "account_blocked",
     "account deactivated",
     "account deleted",
     "account banned",
+    "account disabled",
+    "account suspended",
+    "account blocked",
     "account has been deactivated",
     "account has been deleted",
+    "account has been banned",
+    "account has been disabled",
+    "account has been suspended",
+    "account has been blocked",
     "account was deactivated",
     "account was deleted",
+    "account was banned",
+    "account is disabled",
+    "account is deactivated",
+    "account is banned",
+    "account is suspended",
+    "account is blocked",
     "your account has been deactivated",
     "your account has been deleted",
+    "your account has been banned",
+    "your account has been disabled",
+    "your account has been suspended",
+    "your account has been blocked",
     "your account was deactivated",
     "your account was deleted",
+    "user is banned",
+    "user has been banned",
+    "user is deactivated",
+    "error_code: account_deactivated",
+    "error_code:account_deactivated",
+    # 中文标记
     "账号已停用",
+    "账号已被停用",
+    "此账号已被停用",
+    "该账号已被停用",
+    "已被停用",
     "账号已禁用",
+    "账号已被禁用",
+    "此账号已被禁用",
+    "已被禁用",
     "账号已删除",
+    "账号已被删除",
+    "此账号已被删除",
+    "已被删除",
+    "账号已注销",
+    "账号已被注销",
+    "此账号已被注销",
+    "已被注销",
     "账户已停用",
+    "账户已被停用",
+    "此账户已被停用",
     "账户已禁用",
+    "账户已被禁用",
     "账户已删除",
+    "账户已被删除",
+    "账户已注销",
+    "账户已被注销",
+    "账号已封禁",
+    "账号已被封禁",
+    "此账号已被封禁",
+    "该账号已被封禁",
+    "已被封禁",
+    "账户已封禁",
+    "账户已被封禁",
+    "此账户已被封禁",
+    "账号已冻结",
+    "账号已被冻结",
+    "账户已冻结",
+    "账户已被冻结",
+    "此账号已被冻结",
+    "账号已废",
+    # 日文标记
+    "アカウントが無効になっているため",
+    "アカウントが無効",
+    "アカウントが停止",
+    "アカウントが無効化",
+    "アカウントが削除",
+    "アカウントがブロック",
 )
 
 
@@ -75,9 +143,9 @@ def detect_account_unusable_text(text: str) -> str:
         if code in low:
             return code
     if any(marker in low for marker in _ACCOUNT_DEAD_TEXT_MARKERS):
-        if "delete" in low or "删除" in low:
+        if "delete" in low or "删除" in low or "削除" in low:
             return "account_deleted"
-        if "ban" in low or "封" in low:
+        if "ban" in low or "封" in low or "ブロック" in low or "停止" in low or "suspend" in low:
             return "account_banned"
         return "account_deactivated"
     return ""

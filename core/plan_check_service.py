@@ -71,10 +71,12 @@ def _run_plan_check(
         if not db.mark_account_plan_check_running(account_id):
             return {"ok": False, "error": "账号已删除或套餐查询状态已被重置"}
 
+        acc = db.get_account(account_id)
         _wait_for_rate_slot()
         result = check_account_plan(
             access_token,
             proxy=proxy,
+            account=acc,
             timezone_offset_min=timezone_offset_min,
         )
 
@@ -93,6 +95,7 @@ def _run_plan_check(
             recheck_result = check_account_plan(
                 access_token,
                 proxy=proxy,
+                account=acc,
                 timezone_offset_min=timezone_offset_min,
                 max_attempts=1,
             )

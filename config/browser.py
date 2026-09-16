@@ -33,9 +33,9 @@ SAFARI_WEBKIT_VERSION = "537.36"
 MAC_OS_UA_VERSION = "10_15_7"
 
 # ---------- curl_cffi 模拟浏览器 ----------
-# curl_cffi 0.15 当前最高内置到 chrome146。UA、Client Hints、JS navigator
+# curl_cffi 0.15 当前最高内置到 chrome120。UA、Client Hints、JS navigator
 # 必须同步为 146；不能出现 TLS=146、HTTP/JS=149 的跨版本拼接指纹。
-IMPERSONATE = "chrome146"
+IMPERSONATE = "chrome120"
 
 # ---------- 桌面 Chrome 画像 ----------
 BROWSER_FAMILY = "chrome"
@@ -171,6 +171,27 @@ TIMEZONE_NAME_BY_IANA = {
     "Asia/Bangkok": "Indochina Time",
 }
 
+TIMEZONE_OFFSET_FALLBACKS: dict[str, int] = {
+    "Asia/Tokyo": 540,
+    "Asia/Seoul": 540,
+    "Asia/Shanghai": 480,
+    "Asia/Singapore": 480,
+    "Asia/Hong_Kong": 480,
+    "Asia/Taipei": 480,
+    "Asia/Ho_Chi_Minh": 420,
+    "Asia/Bangkok": 420,
+    "Asia/Jakarta": 420,
+    "Europe/London": 60,
+    "Europe/Berlin": 120,
+    "Europe/Paris": 120,
+    "Europe/Amsterdam": 120,
+    "America/New_York": -240,
+    "America/Chicago": -300,
+    "America/Denver": -360,
+    "America/Los_Angeles": -420,
+    "UTC": 0,
+}
+
 
 def _offset_minutes_for_timezone(tz_name: str, default: int) -> int:
     try:
@@ -179,6 +200,8 @@ def _offset_minutes_for_timezone(tz_name: str, default: int) -> int:
             return int(offset.total_seconds() // 60)
     except Exception:
         pass
+    if tz_name in TIMEZONE_OFFSET_FALLBACKS:
+        return TIMEZONE_OFFSET_FALLBACKS[tz_name]
     return int(default)
 
 

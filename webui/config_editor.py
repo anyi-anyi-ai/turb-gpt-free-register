@@ -59,7 +59,15 @@ EDITABLE_FIELDS = [
     # ---- CloakBrowser ----
     {
         "key": "CLOAK_HEADLESS", "file": "cloakbrowser.py", "type": "bool", "group": "CloakBrowser",
-        "label": "Cloak无头", "help": "True=无头运行；False=显示浏览器窗口",
+        "label": "Cloak无头模式", "help": "True=默认无头运行（遇到人机验证时自动尝试清障并弹窗）；False=始终显示窗口",
+    },
+    {
+        "key": "CLOAK_AUTO_CLEAR_MAX_ATTEMPTS", "file": "cloakbrowser.py", "type": "int", "group": "CloakBrowser",
+        "label": "自动清障重试次数", "help": "无头模式下遇到人机验证时，静默穿透点击尝试的最大次数，默认 2 次",
+    },
+    {
+        "key": "CLOAK_HUMAN_TAKEOVER_TIMEOUT", "file": "cloakbrowser.py", "type": "int", "group": "CloakBrowser",
+        "label": "弹窗人工接管等待(秒)", "help": "自动清障失败转有头弹窗后，等待人工手动解决的超时秒数，默认 30 秒（建议 20~40 秒）",
     },
     {
         "key": "CLOAK_HUMANIZE", "file": "cloakbrowser.py", "type": "bool", "group": "CloakBrowser",
@@ -403,13 +411,21 @@ EDITABLE_FIELDS = [
         "storage": "env", "secret": True,
     },
     {
+        "key": "MAIL_NEST_API_BASE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
+        "label": "MailNest API 地址", "help": "默认 https://mailnest.top，无需修改",
+    },
+    {
         "key": "MAIL_NEST_API_KEY", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
         "label": "MailNest API Key", "help": "选择 mailnest 邮箱来源时必填；保存在 .env，不会写入 config 源码",
         "storage": "env", "secret": True,
     },
     {
+        "key": "MAIL_NEST_MODE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
+        "label": "MailNest 购买模式", "help": "temporary=临时邮箱（默认，需项目代码）；exclusive=独占邮箱（单价稍高，无需项目代码）",
+    },
+    {
         "key": "MAIL_NEST_PROJECT_CODE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
-        "label": "MailNest 项目代码", "help": "项目代码 默认 chatgpt001 获取页面 mailnest.top/buy-email",
+        "label": "MailNest 项目代码", "help": "临时邮箱项目代码，默认 chatgpt001；获取页面 mailnest.top/buy-email",
     },
     {
         "key": "CLOUDMAIL_API_BASE", "file": "email.py", "type": "str", "group": "邮箱 / OTP",
@@ -707,6 +723,55 @@ EDITABLE_FIELDS = [
     {
         "key": "L_PHONE_PREFIX", "file": "codex.py", "type": "str", "group": "接码平台",
         "label": "L 号码前缀", "help": "L 返回号码不含国家码时填写，例如美国 10 位本地号填 1；留空则不补",
+    },
+    # ---- ChatGPT 养号与保活 ----
+    {
+        "key": "WARMING_DRIVER", "file": "warming.py", "type": "str", "group": "ChatGPT 养号",
+        "label": "养号驱动", "help": "cloak=CloakBrowser（推荐，轻量Playwright）；roxy=RoxyBrowser",
+    },
+    {
+        "key": "WARMING_HEADLESS", "file": "warming.py", "type": "bool", "group": "ChatGPT 养号",
+        "label": "养号无头模式", "help": "True=后台静默运行；False=弹出浏览器窗口便于观察",
+    },
+    {
+        "key": "WARMING_SCHEDULER_ENABLED", "file": "warming.py", "type": "bool", "group": "ChatGPT 养号",
+        "label": "启用后台定时养号", "help": "开启后，后台调度器会定期自动为到期账号静默养号",
+    },
+    {
+        "key": "WARMING_INTERVAL_DAYS", "file": "warming.py", "type": "int", "group": "ChatGPT 养号",
+        "label": "养号周期（天）", "help": "账号距上次养号超过该天数即视为到期待养，默认 3 天",
+    },
+    {
+        "key": "WARMING_CONCURRENCY", "file": "warming.py", "type": "int", "group": "ChatGPT 养号",
+        "label": "养号并发数", "help": "同时启动的浏览器养号任务数量，建议 1~2，防止消耗过多内存",
+    },
+    {
+        "key": "WARMING_ACTIVE_HOURS", "file": "warming.py", "type": "str", "group": "ChatGPT 养号",
+        "label": "允许活跃时间段", "help": "本地时间范围（如 08:00-23:00），避免在深夜非正常时间频繁唤醒",
+    },
+    {
+        "key": "WARMING_USE_STICKY_PROXY", "file": "warming.py", "type": "bool", "group": "ChatGPT 养号",
+        "label": "绑定注册原代理", "help": "优先复用账号注册时绑定的代理或出口，保障 IP 地理位置一致性",
+    },
+    {
+        "key": "WARMING_WEIGHT_CHAT", "file": "warming.py", "type": "int", "group": "ChatGPT 养号",
+        "label": "自然问答权重", "help": "混合行为概率分布：自然提问+阅读+点赞复制的权重（默认 65）",
+    },
+    {
+        "key": "WARMING_WEIGHT_HISTORY", "file": "warming.py", "type": "int", "group": "ChatGPT 养号",
+        "label": "历史翻阅权重", "help": "翻看旧会话与滚动的权重（默认 20）",
+    },
+    {
+        "key": "WARMING_WEIGHT_BROWSE", "file": "warming.py", "type": "int", "group": "ChatGPT 养号",
+        "label": "首页漫游权重", "help": "仅在首页停留与探索 GPTs 的权重（默认 15）",
+    },
+    {
+        "key": "WARMING_MIN_DWELL_SECONDS", "file": "warming.py", "type": "float", "group": "ChatGPT 养号",
+        "label": "最小停留时长(秒)", "help": "单次养号在页面停留的最少秒数，默认 35 秒",
+    },
+    {
+        "key": "WARMING_MAX_DWELL_SECONDS", "file": "warming.py", "type": "float", "group": "ChatGPT 养号",
+        "label": "最大停留时长(秒)", "help": "单次养号在页面停留的最大秒数，默认 90 秒",
     },
 ]
 

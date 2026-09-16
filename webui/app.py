@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from flask import Flask, Response, jsonify, make_response, render_template, request
 import pyotp
 
-from core import codex_retry_service, db, plan_check_service, extract_link_service, codex_agent_service, live_check_service
+from core import codex_retry_service, db, plan_check_service, extract_link_service, codex_agent_service, live_check_service, warming_scheduler
 from webui.auth import init_auth, register_auth_routes
 from core import registration_service as svc
 from webui import config_editor
@@ -116,7 +116,7 @@ def _compact_account_for_list(row: dict) -> dict:
         "user_name", "email_source", "original_email", "note", "archived", "created_at",
         "plan_type", "current_plan_type", "plus_trial_eligible",
         "plan_check_status", "codex_status", "codex_agent_status",
-        "totp_setup_status",
+        "totp_setup_status", "warming_status", "last_warmed_at", "warm_count",
     ):
         if key in row:
             out[key] = row.get(key)
@@ -134,6 +134,8 @@ def _compact_account_for_list(row: dict) -> dict:
         # 查活状态。
         "live_check_status", "live_check_error", "live_checked_at",
         "live_check_proxy_used", "live_check_fingerprint_text",
+        # 养号状态。
+        "last_warm_action", "last_warm_prompt", "last_warm_dwell", "warming_error", "warming_trigger",
         # 提链成功/失败时才需要。
         "extract_link_status", "extract_link_type", "extract_link_message", "extract_link_error",
         "extract_link_long_url", "extract_link_copy_paste", "extract_link_image_url_png",
@@ -328,6 +330,13 @@ def create_app(auth_code: str | None = None) -> Flask:
     recovered_email_changes = db.recover_interrupted_email_changes()
     if recovered_email_changes:
         logger.warning("已恢复 %s 个因 WebUI 重启中断的邮箱换绑状态", recovered_email_changes)
+    recovered_warmings = db.recover_interrupted_warmings()
+    if recovered_warmings:
+        logger.warning("已恢复 %s 个因 WebUI 重启中断的养号状态", recovered_warmings)
+
+    from config import warming as _wcfg
+    if bool(getattr(_wcfg, "WARMING_SCHEDULER_ENABLED", False)):
+        warming_scheduler.start_scheduler()
 
     # ----------------------------------------------------------
     # 页面
@@ -355,7 +364,7 @@ def create_app(auth_code: str | None = None) -> Flask:
     def api_summary():
         from config import email as _email_cfg
         from core.email_provider import parse_email_sources
-        pool = {"total": 0, "available": 0, "used": 0, "failed": 0}
+        pool = {"total": 0, "available": 0, "used": 0, "failed": 0, "banned": 0}
         for src in parse_email_sources(_email_cfg.EMAIL_SOURCE):
             # GPTMail/MailNest/CloudMail 地址按需生成，不属于本地邮箱池。
             if src in ("gptmail", "mailnest", "cloudmail", "cloudflare"):
@@ -368,6 +377,19 @@ def create_app(auth_code: str | None = None) -> Flask:
             )
             for k in pool:
                 pool[k] += int(one.get(k, 0) or 0)
+        # 若当前配置为云端/按需邮箱（pool 为 0），概览卡片回退统计本地已导入的邮箱池，避免误显示为 0
+        parsed = parse_email_sources(_email_cfg.EMAIL_SOURCE)
+        if pool.get("total", 0) == 0 and not ("gptmail" in parsed and len(parsed) == 1):
+            all_local = db.outlook_pool_summary()
+            for fn in (db.generic_api_email_pool_summary, db.imap_email_pool_summary):
+                try:
+                    s_item = fn()
+                    for k in all_local:
+                        all_local[k] += int(s_item.get(k, 0) or 0)
+                except Exception:
+                    pass
+            if all_local.get("total", 0) > 0:
+                pool = all_local
         domain_pool = db.domain_email_pool_summary()
         return jsonify({
             "accounts": db.count_accounts(),
@@ -375,10 +397,12 @@ def create_app(auth_code: str | None = None) -> Flask:
             "outlook_available": pool.get("available", 0),
             "outlook_used": pool.get("used", 0),
             "outlook_failed": pool.get("failed", 0),
+            "outlook_banned": pool.get("banned", 0),
             "domain_total": domain_pool.get("total", 0),
             "domain_available": domain_pool.get("available", 0),
             "domain_used": domain_pool.get("used", 0),
             "domain_failed": domain_pool.get("failed", 0),
+            "domain_banned": domain_pool.get("banned", 0),
         })
 
     # ----------------------------------------------------------
@@ -874,6 +898,75 @@ def create_app(auth_code: str | None = None) -> Flask:
             "skipped": skipped,
             "queue": live_check_service.queue_settings(),
         }), 202
+
+    @app.post("/api/accounts/<int:acc_id>/warm")
+    def api_account_warm_single(acc_id: int):
+        """单账号拟人养号。"""
+        data = request.get_json(silent=True) or {}
+        headless = data.get("headless")
+        res = warming_scheduler.trigger_batch_warming([acc_id], headless=headless)
+        return jsonify(res)
+
+    @app.post("/api/accounts/warm-bulk")
+    def api_accounts_warm_bulk():
+        """批量账号拟人养号。Body {account_ids:[...], headless?: bool}"""
+        data = request.get_json(silent=True) or {}
+        ids = data.get("account_ids") or data.get("ids") or []
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"ok": False, "error": "account_ids 必须是非空数组"}), 400
+        headless = data.get("headless")
+        res = warming_scheduler.trigger_batch_warming(ids, headless=headless)
+        return jsonify(res), 202
+
+    @app.get("/api/warming/status")
+    def api_warming_status():
+        """获取养号调度器与后台任务状态。"""
+        return jsonify({"ok": True, "data": warming_scheduler.get_warming_status()})
+
+    @app.post("/api/warming/scheduler/toggle")
+    def api_warming_scheduler_toggle():
+        """启停后台定时养号调度器。"""
+        data = request.get_json(silent=True) or {}
+        enable = data.get("enable")
+        from config import warming as _wcfg
+        if enable is not None:
+            _wcfg.WARMING_SCHEDULER_ENABLED = bool(enable)
+        else:
+            _wcfg.WARMING_SCHEDULER_ENABLED = not bool(getattr(_wcfg, "WARMING_SCHEDULER_ENABLED", False))
+
+        if _wcfg.WARMING_SCHEDULER_ENABLED:
+            warming_scheduler.start_scheduler()
+        else:
+            warming_scheduler.stop_scheduler()
+        return jsonify({"ok": True, "data": warming_scheduler.get_warming_status()})
+
+    @app.get("/api/warming/prompts")
+    def api_warming_prompts_get():
+        """读取本地日常语料库。"""
+        from pathlib import Path
+        from config import warming as _wcfg
+        corpus_path = Path(__file__).resolve().parent.parent / getattr(_wcfg, "WARMING_CORPUS_FILE", "config/prompts_corpus.json")
+        try:
+            if corpus_path.exists():
+                return jsonify({"ok": True, "data": json.loads(corpus_path.read_text(encoding="utf-8"))})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 500
+        return jsonify({"ok": True, "data": {}})
+
+    @app.post("/api/warming/prompts")
+    def api_warming_prompts_save():
+        """保存自定义日常语料库。"""
+        from pathlib import Path
+        from config import warming as _wcfg
+        data = request.get_json(silent=True) or {}
+        categories = data.get("categories") or data
+        corpus_path = Path(__file__).resolve().parent.parent / getattr(_wcfg, "WARMING_CORPUS_FILE", "config/prompts_corpus.json")
+        try:
+            corpus_path.parent.mkdir(parents=True, exist_ok=True)
+            corpus_path.write_text(json.dumps({"categories": categories}, ensure_ascii=False, indent=2), encoding="utf-8")
+            return jsonify({"ok": True, "message": "语料库保存成功"})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 500
 
 
     @app.post("/api/accounts/check-plan")
@@ -1582,6 +1675,77 @@ def create_app(auth_code: str | None = None) -> Flask:
                 "X-Download-Options": "noopen",
             },
         )
+
+    # ----------------------------------------------------------
+    # 代理国家节点统计与权重分配
+    # ----------------------------------------------------------
+    @app.get("/api/proxy/country-stats")
+    def api_proxy_country_stats():
+        try:
+            from core import proxy_stats
+            force = str(request.args.get("refresh", "")).lower() in {"1", "true", "yes"}
+            items = proxy_stats.get_country_proxy_stats(force_refresh=force)
+            weights = db.get_proxy_country_weights()
+            return jsonify({
+                "ok": True,
+                "items": items,
+                "weights": weights,
+                "residential_only": proxy_stats.is_residential_only(),
+            })
+        except Exception as e:
+            logger.exception("获取代理国家统计失败")
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/proxy/country-weights")
+    def api_proxy_country_weights():
+        try:
+            from core import proxy_stats
+            data = request.get_json(silent=True) or {}
+            weights = data.get("weights")
+            if not isinstance(weights, dict):
+                return jsonify({"ok": False, "error": "weights 必须为字典对象"}), 400
+            db.save_proxy_country_weights(weights)
+            with proxy_stats._CACHE_LOCK:
+                proxy_stats._LAST_STATS_TIME = 0.0
+            return jsonify({
+                "ok": True,
+                "weights": db.get_proxy_country_weights(),
+                "residential_only": proxy_stats.is_residential_only(),
+            })
+        except Exception as e:
+            logger.exception("保存代理国家权重失败")
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/proxy/refresh-stats")
+    def api_proxy_refresh_stats():
+        try:
+            from core import proxy_stats
+            items = proxy_stats.get_country_proxy_stats(force_refresh=True)
+            return jsonify({
+                "ok": True,
+                "items": items,
+                "weights": db.get_proxy_country_weights(),
+                "residential_only": proxy_stats.is_residential_only(),
+            })
+        except Exception as e:
+            logger.exception("刷新代理国家统计失败")
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.post("/api/proxy/toggle-residential-only")
+    def api_proxy_toggle_residential_only():
+        try:
+            from core import proxy_stats
+            data = request.get_json(silent=True) or {}
+            enabled = data.get("enabled")
+            if enabled is None:
+                enabled = not proxy_stats.is_residential_only()
+            else:
+                enabled = bool(enabled)
+            result = proxy_stats.apply_residential_routing(enabled)
+            return jsonify(result)
+        except Exception as e:
+            logger.exception("切换纯住宅模式失败")
+            return jsonify({"ok": False, "error": str(e)}), 500
 
     # ----------------------------------------------------------
     # 邮箱池
@@ -2458,6 +2622,22 @@ def create_app(auth_code: str | None = None) -> Flask:
             pass
         return jsonify(data)
 
+    @app.get("/api/accounts/warming-log")
+    def api_account_warming_log():
+        """读取某邮箱最近一次拟人养号日志。?email=xxx"""
+        from core import account_warming
+        email = (request.args.get("email") or "").strip()
+        if not email:
+            return jsonify({"ok": False, "error": "email 为空"}), 400
+        p = account_warming._log_path(email)
+        data = _read_log_tail(p, max_bytes=80_000, running_fn=lambda: False)
+        try:
+            acc = db.get_account_by_email(email) or {}
+            data["running"] = bool(str(acc.get("warming_status") or "") in {"queued", "running"})
+        except Exception:
+            pass
+        return jsonify(data)
+
     @app.get("/api/accounts/<int:acc_id>/change-email-log")
     def api_account_change_email_log(acc_id: int):
         """读取账号最近一次邮箱换绑日志。"""
@@ -2573,16 +2753,22 @@ def create_app(auth_code: str | None = None) -> Flask:
                 }), 400
         if "mailnest" in sources:
             api_key = str(getattr(_email_cfg, "MAIL_NEST_API_KEY", "") or "").strip()
+            mode = str(getattr(_email_cfg, "MAIL_NEST_MODE", "temporary") or "temporary").strip().lower()
             project_code = str(getattr(_email_cfg, "MAIL_NEST_PROJECT_CODE", "") or "").strip()
             if not api_key:
                 return jsonify({
                     "ok": False,
                     "error": "已选择 mailnest 邮箱来源，请填写 MailNest API Key（配置 → 邮箱 / OTP）。",
                 }), 400
-            if not project_code:
+            if mode not in ("temporary", "exclusive"):
                 return jsonify({
                     "ok": False,
-                    "error": "已选择 mailnest 邮箱来源，请填写 MailNest 项目代码（配置 → 邮箱 / OTP）。",
+                    "error": "MailNest 购买模式只能填写 temporary（临时邮箱）或 exclusive（独占邮箱）。",
+                }), 400
+            if mode == "temporary" and not project_code:
+                return jsonify({
+                    "ok": False,
+                    "error": "已选择 mailnest 临时邮箱模式，请填写 MailNest 项目代码（配置 → 邮箱 / OTP）。",
                 }), 400
         if "cloudmail" in sources:
             api_base = str(getattr(_email_cfg, "CLOUDMAIL_API_BASE", "") or "").strip()
@@ -2969,5 +3155,33 @@ def create_app(auth_code: str | None = None) -> Flask:
                 else f"⚠️ 已写入文件但热加载失败（{reload_err}），需重启 Web 服务才能生效"
             ),
         })
+
+    @app.get("/api/gptgrok2api/status")
+    def api_gptgrok2api_status():
+        """获取当前待推送账号状态与批次设置。"""
+        try:
+            from core.gptgrok2api_sync import get_unpushed_accounts, BATCH_SYNC_SIZE
+            unpushed = get_unpushed_accounts()
+            return jsonify({
+                "ok": True,
+                "unpushed_count": len(unpushed),
+                "batch_size": BATCH_SYNC_SIZE,
+                "unpushed_emails": [a["email"] for a in unpushed],
+            })
+        except Exception as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 500
+
+    @app.post("/api/sync_gptgrok2api")
+    def api_sync_gptgrok2api():
+        """手动触发账号同步到 GPT Grok 2 API（支持强制全量或增量补推）。"""
+        data = request.get_json(silent=True) or {}
+        force = bool(data.get("force", True))
+        try:
+            from core.gptgrok2api_sync import sync_all_registered_accounts
+            res = sync_all_registered_accounts(force=force)
+            return jsonify(res)
+        except Exception as exc:
+            logger.exception("同步到 gptGrok2api 失败")
+            return jsonify({"ok": False, "error": str(exc)}), 500
 
     return app

@@ -12,7 +12,7 @@ from config.env_loader import env_str, apply_env_overrides
 
 # True: REGISTER_EMAIL 留空时从 Outlook 账号池自动获取邮箱，OTP 自动收取
 # False: 走人工输入邮箱 + 人工填 OTP 的流程
-USE_EMAIL_SERVICE = False
+USE_EMAIL_SERVICE = True
 
 # 可选值（也可以用英文逗号配置多个，按顺序兜底，例如 "outlook,generic_api,mailnest,remail"）：
 #   "outlook"           — 外购 Outlook 账号池 + mail.chatai.codes 远端取信
@@ -24,7 +24,7 @@ USE_EMAIL_SERVICE = False
 #   "mailnest"          — MailNest/迈巢临时邮箱 API（运行时购买邮箱并自动收码）
 #   "cloudmail"         — CloudMail/Cloud Mail API（自动从平台获取域名并随机生成邮箱）
 #   "remail"            — Remail 开放 API（按项目下单并自动收取验证码）
-EMAIL_SOURCE = "outlook,generic_api,mailnest"
+EMAIL_SOURCE = "outlook"
 
 
 # ============================================================
@@ -117,14 +117,20 @@ CLOUDFLARE_NAME_LENGTH = 10
 
 
 # ============================================================
-# MailNest-迈巢 Outlook 临时邮箱：https://mailnest.top/
+# MailNest-迈巢 Outlook 临时邮箱 / 独占邮箱：https://mailnest.top/
 # ============================================================
+
+# MailNest API 地址，默认 https://mailnest.top
+MAIL_NEST_API_BASE = env_str("MAIL_NEST_API_BASE", "https://mailnest.top")
 
 # 选择 EMAIL_SOURCE="mailnest" 时必填；请在 WebUI「配置 → 邮箱 / OTP」填写。
 MAIL_NEST_API_KEY = env_str("MAIL_NEST_API_KEY", "")
 
-# MailNest 项目代码；OpenAI/ChatGPT 默认 chatgpt001。
-MAIL_NEST_PROJECT_CODE = "chatgpt001"
+# 邮箱购买模式：temporary（临时邮箱，默认）或 exclusive（独占邮箱）
+MAIL_NEST_MODE = env_str("MAIL_NEST_MODE", "temporary")
+
+# MailNest 项目代码；OpenAI/ChatGPT 临时邮箱默认 chatgpt001（独占邮箱模式无需项目代码）。
+MAIL_NEST_PROJECT_CODE = env_str("MAIL_NEST_PROJECT_CODE", "chatgpt001")
 
 # ============================================================
 # CloudMail API 文档：https://doc.skymail.ink/api/api-doc
@@ -182,4 +188,4 @@ REMAIL_ORDER_WAIT_SECONDS = 30
 REMAIL_REQUEST_TIMEOUT = 20
 
 # ---- .env overrides for WebUI editable fields ----
-apply_env_overrides(globals(), {'USE_EMAIL_SERVICE': 'bool', 'OTP_MAX_WAIT': 'int', 'OTP_POLL_INTERVAL': 'int', 'EMAIL_SOURCE': 'str', 'IMAP_MAILBOX': 'str', 'EMAIL_DOMAIN': 'str', 'QQ_EMAIL': 'str', 'QQ_IMAP_PASSWORD': 'str', 'GPTMAIL_API_KEY': 'str', 'OUTLOOK_FETCH_MODE': 'str', 'MAIL_NEST_API_KEY': 'str', 'MAIL_NEST_PROJECT_CODE': 'str', 'CLOUDFLARE_API_BASE': 'str', 'CLOUDFLARE_API_KEY': 'str', 'CLOUDFLARE_AUTH_MODE': 'str', 'CLOUDFLARE_CUSTOM_AUTH': 'str', 'CLOUDFLARE_PATH_DOMAINS': 'str', 'CLOUDFLARE_PATH_ACCOUNTS': 'str', 'CLOUDFLARE_PATH_TOKEN': 'str', 'CLOUDFLARE_PATH_MESSAGES': 'str', 'CLOUDFLARE_DEFAULT_DOMAINS': 'list_str_multiline', 'CLOUDFLARE_REQUEST_TIMEOUT': 'int', 'CLOUDFLARE_NAME_LENGTH': 'int', 'CLOUDMAIL_API_BASE': 'str', 'CLOUDMAIL_ADMIN_EMAIL': 'str', 'CLOUDMAIL_PASSWORD': 'str', 'CLOUDMAIL_TOKEN_PATH': 'str', 'CLOUDMAIL_AUTH_TOKEN': 'str', 'CLOUDMAIL_DOMAINS': 'list_str_multiline', 'CLOUDMAIL_AUTO_ADD_USER': 'bool', 'CLOUDMAIL_RANDOM_LOCAL_LENGTH': 'int', 'REMAIL_API_BASE': 'str', 'REMAIL_API_KEY': 'str', 'REMAIL_PROJECT_ID': 'int', 'REMAIL_EMAIL_SUFFIX': 'str', 'REMAIL_SERVICE_MODE': 'str', 'REMAIL_SUPPLY_POLICY': 'str', 'REMAIL_ORDER_WAIT_SECONDS': 'int', 'REMAIL_REQUEST_TIMEOUT': 'int'})
+apply_env_overrides(globals(), {'USE_EMAIL_SERVICE': 'bool', 'OTP_MAX_WAIT': 'int', 'OTP_POLL_INTERVAL': 'int', 'EMAIL_SOURCE': 'str', 'IMAP_MAILBOX': 'str', 'EMAIL_DOMAIN': 'str', 'QQ_EMAIL': 'str', 'QQ_IMAP_PASSWORD': 'str', 'GPTMAIL_API_KEY': 'str', 'OUTLOOK_FETCH_MODE': 'str', 'MAIL_NEST_API_BASE': 'str', 'MAIL_NEST_API_KEY': 'str', 'MAIL_NEST_MODE': 'str', 'MAIL_NEST_PROJECT_CODE': 'str', 'CLOUDFLARE_API_BASE': 'str', 'CLOUDFLARE_API_KEY': 'str', 'CLOUDFLARE_AUTH_MODE': 'str', 'CLOUDFLARE_CUSTOM_AUTH': 'str', 'CLOUDFLARE_PATH_DOMAINS': 'str', 'CLOUDFLARE_PATH_ACCOUNTS': 'str', 'CLOUDFLARE_PATH_TOKEN': 'str', 'CLOUDFLARE_PATH_MESSAGES': 'str', 'CLOUDFLARE_DEFAULT_DOMAINS': 'list_str_multiline', 'CLOUDFLARE_REQUEST_TIMEOUT': 'int', 'CLOUDFLARE_NAME_LENGTH': 'int', 'CLOUDMAIL_API_BASE': 'str', 'CLOUDMAIL_ADMIN_EMAIL': 'str', 'CLOUDMAIL_PASSWORD': 'str', 'CLOUDMAIL_TOKEN_PATH': 'str', 'CLOUDMAIL_AUTH_TOKEN': 'str', 'CLOUDMAIL_DOMAINS': 'list_str_multiline', 'CLOUDMAIL_AUTO_ADD_USER': 'bool', 'CLOUDMAIL_RANDOM_LOCAL_LENGTH': 'int', 'REMAIL_API_BASE': 'str', 'REMAIL_API_KEY': 'str', 'REMAIL_PROJECT_ID': 'int', 'REMAIL_EMAIL_SUFFIX': 'str', 'REMAIL_SERVICE_MODE': 'str', 'REMAIL_SUPPLY_POLICY': 'str', 'REMAIL_ORDER_WAIT_SECONDS': 'int', 'REMAIL_REQUEST_TIMEOUT': 'int'})

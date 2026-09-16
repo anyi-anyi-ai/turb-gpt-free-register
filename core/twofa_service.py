@@ -90,8 +90,15 @@ def _run_twofa(
         fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
         fh.addFilter(lambda record: record.threadName == thread_name)
         root_logger.addHandler(fh)
-        logger.info("[2FA] 开始后台设置：email=%s trigger=%s", email, trigger)
         real_proxy = _normalize_proxy(proxy)
+        if not real_proxy:
+            acc = db.get_account(account_id) or {}
+            if acc:
+                from config import proxy as _proxy_cfg
+                try:
+                    real_proxy = _normalize_proxy(_proxy_cfg.pick_proxy_for_account(acc))
+                except Exception:
+                    real_proxy = None
         identity = email.strip().lower()
         session = BrowserSession(proxy=real_proxy, fingerprint_seed=f"account:{identity}")
         _append_log(email, f"[2FA] 会话创建完成：proxy={session.proxy or 'direct'} device_id={session.device_id}")
@@ -101,6 +108,11 @@ def _run_twofa(
             account_id,
             {"ok": True, "status": "success", "totp_secret": secret, "message": "2FA 设置完成"},
         )
+        try:
+            from core.gptgrok2api_sync import on_account_completed
+            on_account_completed(email)
+        except Exception:
+            pass
         _append_log(email, f"[2FA] 完成：secret={secret[:4]}...{secret[-4:]}")
         logger.info("[2FA] 完成：email=%s secret=%s...%s", email, secret[:4], secret[-4:])
         return {"ok": True, "status": "success", "totp_secret": secret, "message": "2FA 设置完成"}

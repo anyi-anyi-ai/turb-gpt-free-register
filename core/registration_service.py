@@ -167,6 +167,21 @@ def _should_disable_failed_registration_email(error: object) -> bool:
     )
 
 
+def _ban_job_email(email: str | None, dead_code: str) -> bool:
+    """把本次任务邮箱标记为已封禁，避免后续再次领取。"""
+    if not email:
+        return False
+    try:
+        from core.email_provider import release_email
+
+        source = release_email(email, status="banned", note=f"GPT已封禁: {dead_code[:180]}")
+        logger.warning("[Service][封禁剔除] 已自动标记邮箱为已封禁: source=%s email=%s code=%s", source, email, dead_code[:100])
+        return True
+    except Exception:
+        logger.exception("[Service] 自动标记封禁邮箱失败: %s", email)
+        return False
+
+
 def _disable_job_email(email: str | None, reason: str) -> bool:
     """把本次任务邮箱停用，避免后续再次领取。"""
     if not email:
@@ -306,10 +321,12 @@ def _run_one_job(job_id: int, log_file: str) -> None:
                     db.update_job(job_id, email=email)
                     log_logger.info(f"[Job {job_id}] 页面已找到邮箱输入框，已分配邮箱: {email}")
 
+            job_country = current.get("country")
             result = run_registration(
                 email=email,
                 name=name,
                 birthday=birthday,
+                country=job_country,
                 on_email_acquired=_on_email_acquired,
             )
             if is_stop_requested(job_id):
@@ -347,7 +364,11 @@ def _run_one_job(job_id: int, log_file: str) -> None:
                     completed_at=datetime.now().isoformat(timespec="seconds"),
                 )
                 email_to_handle = str(result_email or email or "").strip()
-                if _should_disable_failed_registration_email(err):
+                from core.openai_auth import detect_account_unusable_text
+                dead_code = detect_account_unusable_text(str(err))
+                if dead_code:
+                    _ban_job_email(email_to_handle, dead_code)
+                elif _should_disable_failed_registration_email(err):
                     _disable_job_email(email_to_handle, str(err))
                 else:
                     _release_unconsumed_job_email(email_to_handle, str(err))
@@ -363,7 +384,11 @@ def _run_one_job(job_id: int, log_file: str) -> None:
         )
     except Exception as exc:
         err_text = f"{type(exc).__name__}: {exc}"
-        if _should_disable_failed_registration_email(err_text):
+        from core.openai_auth import detect_account_unusable_text
+        dead_code = detect_account_unusable_text(err_text)
+        if dead_code:
+            _ban_job_email(email, dead_code)
+        elif _should_disable_failed_registration_email(err_text):
             _disable_job_email(email, err_text)
         else:
             _release_unconsumed_job_email(email, err_text)
@@ -440,10 +465,16 @@ def _run_codex_retry_job(job_id: int, log_file: str, email: str, account_id: int
 # 公共接口
 # ============================================================
 
-def submit_registration(count: int = 1, email_source: str | None = None, workers: int | None = None) -> list[dict]:
+def submit_registration(
+    count: int = 1,
+    email_source: str | None = None,
+    workers: int | None = None,
+    country: str | None = None,
+) -> list[dict]:
     """
     创建 N 个注册任务并提交到线程池。
     email_source 仅记录到 DB；实际邮箱来源固定为 Outlook 账号池。
+    country 指定目标注册国家代码。
 
     Returns:
         N 个新创建的 job dict
@@ -459,7 +490,7 @@ def submit_registration(count: int = 1, email_source: str | None = None, workers
         effective_workers = get_executor_workers()
         jobs = []
         for _ in range(count):
-            job = db.create_job(email_source=email_source)
+            job = db.create_job(email_source=email_source, country=country)
             try:
                 executor.submit(_run_one_job, job["id"], job["log_file"])
             except Exception as exc:

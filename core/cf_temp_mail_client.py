@@ -149,9 +149,10 @@ def _normalize_domains(raw) -> list[str]:
             parts = [raw]
     out: list[str] = []
     for item in parts:
-        domain = str(item or "").strip().lower().lstrip("@")
-        if domain and "." in domain and " " not in domain and domain not in out:
-            out.append(domain)
+        for sub in str(item or "").replace(";", "\n").replace(",", "\n").splitlines():
+            domain = sub.strip().lower().lstrip("@")
+            if domain and "." in domain and " " not in domain and domain not in out:
+                out.append(domain)
     return out
 
 

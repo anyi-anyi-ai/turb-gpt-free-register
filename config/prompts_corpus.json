@@ -1,0 +1,46 @@
+{
+  "categories": {
+    "daily_lifestyle": [
+      "请推荐几道简单、营养又好做的家常快手菜，最好半小时内能搞定。",
+      "每天喝多少水最健康？不同体重的人有推荐饮水量吗？",
+      "怎样才能改善睡眠质量？有什么不依赖药物的助眠小技巧吗？",
+      "如何合理安排周末时间，既能充分休息又能保持充实？",
+      "室内养什么植物既耐阴又容易存活，还能净化空气？",
+      "推荐几首适合在工作或学习时听的轻音乐或Lo-Fi歌单风格。"
+    ],
+    "study_and_reading": [
+      "请推荐 3 本适合初学者入门的时间管理或个人成长书籍，并附带简要理由。",
+      "番茄工作法在实际执行时有哪些容易踩的坑？怎么调整最合适？",
+      "费曼学习法的核心步骤是什么？能不能举一个通俗易懂的例子说明？",
+      "怎样提高自己的深度阅读理解能力和做读书笔记的效率？",
+      "在信息碎片化时代，如何建立属于自己的个人知识库体系？"
+    ],
+    "tech_and_coding": [
+      "在 Python 中，列表推导式与 map/filter 相比有哪些优缺点？",
+      "请用简单的例子解释一下什么是 Docker 容器与虚拟机的本质区别。",
+      "Git 中 rebase 和 merge 在日常团队协作分支合并时该如何选择？",
+      "解释一下 RESTful API 的核心设计规范，有哪些常见的命名误区？",
+      "如何写出结构清晰、可维护性高的前端组件代码？"
+    ],
+    "travel_and_culture": [
+      "如果计划一次 3 天 2 晚的短途自然风光旅行，行前准备清单有哪些要点？",
+      "世界上有哪些有趣的咖啡文化？比如意大利浓缩咖啡和北欧滴滤咖啡有何不同？",
+      "去高原地区旅游前需要做哪些身体适应准备和装备防范？",
+      "推荐几部豆瓣或IMDb高分的自然纪录片，适合周末观看。"
+    ],
+    "work_and_writing": [
+      "帮我润色一段邮件：感谢对方今天的会议，并约定下周二前同步项目进度报告。",
+      "撰写周报时，如何把日常繁琐的工作提炼出更有价值的业务成果？",
+      "如何高效主持一次 30 分钟内的跨部门敏捷对齐会议？",
+      "请列举 5 个能显著提升办公效率的 Markdown 语法小技巧。"
+    ],
+    "english_prompts": [
+      "Can you suggest 3 quick and healthy breakfast ideas for busy weekdays?",
+      "What are the key differences between synchronous and asynchronous programming?",
+      "Could you recommend a few classic sci-fi novels suitable for casual reading?",
+      "How can I improve my daily vocabulary retention when learning a new language?",
+      "What is the simplest way to explain microservices architecture to a beginner?",
+      "Please give me some practical tips for reducing eye strain when working long hours at a desk."
+    ]
+  }
+}

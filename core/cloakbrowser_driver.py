@@ -2,8 +2,10 @@
 """CloakBrowser 的 Selenium 风格轻量适配层。"""
 from __future__ import annotations
 
+import json
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -84,27 +86,47 @@ class CloakElement:
             return ""
 
     def send_keys(self, *values: str) -> None:
-        # 兼容 Selenium: el.send_keys(Keys.COMMAND, 'a')。
         text = "".join(str(v or "") for v in values)
+        if not text:
+            return
         lower = text.lower()
+        if "\ue03d" in text or "\ue009" in text or "command" in lower or "control" in lower:
+            try:
+                self.page.keyboard.press("Control+A")
+            except Exception:
+                try:
+                    self.page.keyboard.press("Meta+A")
+                except Exception:
+                    pass
+            return
+        if "\ue003" in text or "backspace" in lower:
+            try:
+                self.page.keyboard.press("Backspace")
+            except Exception:
+                pass
+            return
+        if "\ue007" in text or "enter" in lower:
+            try:
+                self.page.keyboard.press("Enter")
+            except Exception:
+                pass
+            return
+
         try:
-            self.click()
+            self._eval("el => el.focus()")
         except Exception:
             pass
-        if "\ue03d" in text or "\ue009" in text or "command" in lower or "control" in lower:
-            # Selenium Keys.CONTROL/COMMAND 编码可能传入私有区字符；这里按全选处理。
-            try:
-                self.page.keyboard.press("Meta+A")
-            except Exception:
-                self.page.keyboard.press("Control+A")
-            return
+
         try:
-            if self.locator is not None:
-                self.locator.fill(text, timeout=10000)
-            else:
-                self.handle.fill(text, timeout=10000)
+            self.page.keyboard.type(text, delay=10)
         except Exception:
-            self.page.keyboard.type(text, delay=35)
+            try:
+                if self.locator is not None:
+                    self.locator.press_sequentially(text, delay=10)
+                else:
+                    self._eval(f"el => el.value += {json.dumps(text)}")
+            except Exception:
+                pass
 
     def get_attribute(self, name: str) -> str | None:
         try:
@@ -113,6 +135,40 @@ class CloakElement:
             return self.handle.get_attribute(name)
         except Exception:
             return None
+
+    @property
+    def text(self) -> str:
+        try:
+            if self.locator is not None:
+                return str(self.locator.inner_text(timeout=1000) or "").strip()
+            if self.handle is not None:
+                return str(self.handle.inner_text() or "").strip()
+            return str(self._eval("el => el.innerText || el.textContent || ''") or "").strip()
+        except Exception:
+            try:
+                return str(self._eval("el => el.innerText || el.textContent || ''") or "").strip()
+            except Exception:
+                return ""
+
+    def is_displayed(self) -> bool:
+        try:
+            if self.locator is not None:
+                return bool(self.locator.is_visible(timeout=1000))
+            if self.handle is not None:
+                return bool(self.handle.is_visible())
+            return bool(self._eval("el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)"))
+        except Exception:
+            return False
+
+    def is_enabled(self) -> bool:
+        try:
+            if self.locator is not None:
+                return bool(self.locator.is_enabled(timeout=1000))
+            if self.handle is not None:
+                return bool(self.handle.is_enabled())
+            return not bool(self._eval("el => el.disabled || el.getAttribute('aria-disabled') === 'true'"))
+        except Exception:
+            return True
 
 
 class _SwitchTo:
@@ -136,6 +192,20 @@ class CloakSeleniumDriver:
     @property
     def current_url(self) -> str:
         return str(getattr(self.page, "url", "") or "")
+
+    @property
+    def title(self) -> str:
+        try:
+            return str(self.page.title() if self.page else "")
+        except Exception:
+            return ""
+
+    @property
+    def page_source(self) -> str:
+        try:
+            return str(self.page.content() if self.page else "")
+        except Exception:
+            return ""
 
     @property
     def window_handles(self) -> list[str]:
@@ -175,13 +245,38 @@ class CloakSeleniumDriver:
             pass
 
     def get(self, url: str) -> None:
-        self.page.goto(url, wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+        try:
+            self.page.goto(url, wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+        except Exception as exc:
+            from selenium.common.exceptions import TimeoutException, WebDriverException
+            if "timeout" in str(exc).lower():
+                raise TimeoutException(str(exc)) from exc
+            raise WebDriverException(str(exc)) from exc
 
     def back(self) -> None:
-        self.page.go_back(wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+        try:
+            self.page.go_back(wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+        except Exception as exc:
+            from selenium.common.exceptions import TimeoutException, WebDriverException
+            if "timeout" in str(exc).lower():
+                raise TimeoutException(str(exc)) from exc
+            raise WebDriverException(str(exc)) from exc
 
     def refresh(self) -> None:
-        self.page.reload(wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+        try:
+            self.page.reload(wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+        except Exception as exc:
+            from selenium.common.exceptions import TimeoutException, WebDriverException
+            if "timeout" in str(exc).lower():
+                raise TimeoutException(str(exc)) from exc
+            raise WebDriverException(str(exc)) from exc
+
+    def bring_to_front(self) -> None:
+        try:
+            if hasattr(self.page, "bring_to_front"):
+                self.page.bring_to_front()
+        except Exception:
+            pass
 
     def quit(self) -> None:
         try:
@@ -210,9 +305,18 @@ class CloakSeleniumDriver:
 
     def _locator(self, by: Any, selector: str):
         by_s = str(by or "").lower()
-        if "xpath" in by_s or str(selector).startswith("//"):
-            return self.page.locator(f"xpath={selector}")
-        return self.page.locator(selector)
+        sel = str(selector)
+        if "xpath" in by_s or sel.startswith("//") or sel.startswith("(//"):
+            return self.page.locator(f"xpath={sel}")
+        if "id" in by_s and not sel.startswith("#"):
+            return self.page.locator(f"#{sel}")
+        if "name" in by_s and not sel.startswith("["):
+            return self.page.locator(f"[name='{sel}']")
+        if "class" in by_s and not sel.startswith("."):
+            return self.page.locator(f".{sel}")
+        if "tag" in by_s:
+            return self.page.locator(sel)
+        return self.page.locator(sel)
 
     def execute_script(self, script: str, *args: Any) -> Any:
         return self._evaluate(script, args=args, async_mode=False)
@@ -223,10 +327,11 @@ class CloakSeleniumDriver:
     def execute_cdp_cmd(self, cmd: str, params: dict | None = None) -> Any:
         params = params or {}
         try:
-            client = self.context.new_cdp_session(self.page) if self.context is not None else self.page.context.new_cdp_session(self.page)
-            return client.send(cmd, params)
+            if not hasattr(self, "_cdp_session") or self._cdp_session is None:
+                self._cdp_session = self.context.new_cdp_session(self.page) if self.context is not None else self.page.context.new_cdp_session(self.page)
+            return self._cdp_session.send(cmd, params)
         except Exception as exc:
-            logger.debug("[Cloak] CDP 命令失败 %s: %s", cmd, exc)
+            logger.debug("[Cloak] CDP 派发失败 %s: %s", cmd, exc)
             return None
 
     def _serialize_args(self, args: tuple[Any, ...]) -> tuple[CloakElement | None, list[Any]]:
@@ -258,6 +363,29 @@ class CloakSeleniumDriver:
         if element is not None:
             return CloakElement(page, handle=element)
         try:
+            # 兼容 JS 返回包含 DOM 元素的字典对象（如 {ok: true, input: <DOM_EL>}）
+            try:
+                props = handle.get_properties()
+            except Exception:
+                props = None
+            if props:
+                result_dict = {}
+                has_sub_elements = False
+                for k, v in props.items():
+                    try:
+                        sub_el = v.as_element()
+                    except Exception:
+                        sub_el = None
+                    if sub_el is not None:
+                        result_dict[k] = CloakElement(page, handle=sub_el)
+                        has_sub_elements = True
+                    else:
+                        try:
+                            result_dict[k] = v.json_value()
+                        except Exception:
+                            result_dict[k] = None
+                if has_sub_elements or isinstance(result_dict, dict):
+                    return result_dict
             return handle.json_value()
         except Exception as exc:
             msg = str(exc)
@@ -309,11 +437,40 @@ class CloakSeleniumDriver:
           const fn = new Function(...args.map((_, i) => 'a' + i), payload.script);
           return fn(...args);
         }"""
-        if first_el is not None:
-            handle = first_el._eval_handle(element_wrapper, {"script": script, "args": serial_args})
-        else:
-            handle = self.page.evaluate_handle(wrapper, {"script": script, "args": serial_args})
-        return self._unwrap_js_result(self.page, handle)
+        for attempt in range(3):
+            try:
+                if first_el is not None:
+                    handle = first_el._eval_handle(element_wrapper, {"script": script, "args": serial_args})
+                else:
+                    handle = self.page.evaluate_handle(wrapper, {"script": script, "args": serial_args})
+                return self._unwrap_js_result(self.page, handle)
+            except Exception as exc:
+                exc_str = str(exc)
+                if ("Execution context was destroyed" in exc_str or "Target closed" in exc_str) and attempt < 2:
+                    time.sleep(0.6)
+                    continue
+                raise
+
+    def quit(self) -> None:
+        try:
+            if self.browser:
+                self.browser.close()
+        except Exception:
+            pass
+
+    def close(self) -> None:
+        try:
+            if self.page:
+                self.page.close()
+        except Exception:
+            pass
+
+    @property
+    def title(self) -> str:
+        try:
+            return self.page.title()
+        except Exception:
+            return ""
 
 
 def _normalize_proxy(proxy: str | None) -> str | None:
@@ -392,79 +549,138 @@ def _build_cloak_locale_options(proxy_url: str | None = None) -> dict:
     return {k: v for k, v in out.items() if v}
 
 
-def build_cloak_driver(proxy: str | None = None) -> tuple[CloakSeleniumDriver, CloakOpenResult]:
+_WINDOW_COUNTER = 0
+_WINDOW_LOCK = threading.Lock()
+
+
+def _next_window_position() -> tuple[int, int, int, int]:
+    """并发启动时多窗口平铺排布（3 列，2 行交替，避免重叠）。"""
+    global _WINDOW_COUNTER
+    with _WINDOW_LOCK:
+        idx = _WINDOW_COUNTER
+        _WINDOW_COUNTER += 1
+    col = idx % 3
+    row = (idx // 3) % 2
+    x = 20 + col * 460
+    y = 20 + row * 420
+    w = 960
+    h = 740
+    return x, y, w, h
+
+
+def build_cloak_driver(
+    proxy: str | None = None,
+    *,
+    country: str | None = None,
+    storage_state: dict | str | None = None,
+    headless: bool | None = None,
+) -> tuple[CloakSeleniumDriver, CloakOpenResult]:
     """启动 CloakBrowser 并返回 Selenium 风格 driver。
 
-    proxy=None  时按 config.proxy.PROXY_POOL 随机抽取；
+    proxy=None  时按 config.proxy 代理池随机抽取（支持 country 指定）；
     proxy=""    时显式禁用代理；
     proxy="..." 时使用指定代理。
+    storage_state: 登录态字典或路径，注入免密秒进。
+    headless: 覆盖全局无头设置。
     """
+    allocated_proxy = None
     if proxy is None and bool(getattr(_cfg, "CLOAK_USE_PROXY", True)):
         try:
             from config.proxy import pick_proxy
-            proxy = pick_proxy()
+            proxy = pick_proxy(country=country, for_registration=True)
+            allocated_proxy = proxy
         except Exception:
             proxy = None
+
     try:
-        from cloakbrowser import launch, launch_persistent_context
-    except ImportError as exc:
-        raise RuntimeError("未安装 cloakbrowser，请执行：pip install cloakbrowser") from exc
+        try:
+            from cloakbrowser import launch, launch_persistent_context
+        except ImportError as exc:
+            raise RuntimeError("未安装 cloakbrowser，请执行：pip install cloakbrowser") from exc
 
-    launch_args = list(getattr(_cfg, "CLOAK_EXTRA_ARGS", []) or [])
-    seed = str(getattr(_cfg, "CLOAK_FINGERPRINT_SEED", "") or "").strip()
-    if seed:
-        launch_args.append(f"--fingerprint={seed}")
+        launch_args = list(getattr(_cfg, "CLOAK_EXTRA_ARGS", []) or [])
+        seed = str(getattr(_cfg, "CLOAK_FINGERPRINT_SEED", "") or "").strip()
+        if seed:
+            launch_args.append(f"--fingerprint={seed}")
 
-    proxy_url = _normalize_proxy(proxy) if bool(getattr(_cfg, "CLOAK_USE_PROXY", True)) else None
-    locale_opts = _build_cloak_locale_options(proxy_url)
-    # geoip=True 交给 CloakBrowser 根据当前出口 IP 自动匹配 timezone/locale/WebRTC。
-    # 之前只有显式 proxy_url 时才开启；如果用户走系统代理/VPN/透明代理，代码层面
-    # 看不到 proxy_url，会误关 geoip，导致语言/时区不跟随出口。这里改为完全尊重配置。
-    opts = {
-        "headless": bool(getattr(_cfg, "CLOAK_HEADLESS", False)),
-        "humanize": bool(getattr(_cfg, "CLOAK_HUMANIZE", True)),
-        "geoip": bool(getattr(_cfg, "CLOAK_GEOIP", True)),
-    }
-    if locale_opts.get("locale"):
-        opts["locale"] = locale_opts["locale"]
-    if locale_opts.get("timezone"):
-        opts["timezone"] = locale_opts["timezone"]
-    if proxy_url:
-        opts["proxy"] = proxy_url
-    if launch_args:
-        opts["args"] = launch_args
-    license_key = str(getattr(_cfg, "CLOAK_LICENSE_KEY", "") or "").strip()
-    if license_key:
-        opts["license_key"] = license_key
+        proxy_url = _normalize_proxy(proxy) if bool(getattr(_cfg, "CLOAK_USE_PROXY", True)) else None
+        locale_opts = _build_cloak_locale_options(proxy_url)
+        # geoip=True 交给 CloakBrowser 根据当前出口 IP 自动匹配 timezone/locale/WebRTC。
+        # 之前只有显式 proxy_url 时才开启；如果用户走系统代理/VPN/透明代理，代码层面
+        # 看不到 proxy_url，会误关 geoip，导致语言/时区不跟随出口。这里改为完全尊重配置。
+        opts = {
+            "headless": bool(getattr(_cfg, "CLOAK_HEADLESS", False)) if headless is None else bool(headless),
+            "humanize": bool(getattr(_cfg, "CLOAK_HUMANIZE", True)),
+            "geoip": bool(getattr(_cfg, "CLOAK_GEOIP", True)),
+        }
+        if locale_opts.get("locale"):
+            opts["locale"] = locale_opts["locale"]
+        if locale_opts.get("timezone"):
+            opts["timezone"] = locale_opts["timezone"]
+        if proxy_url:
+            opts["proxy"] = proxy_url
+        if not opts.get("headless"):
+            wx, wy, ww, wh = _next_window_position()
+            launch_args.extend([f"--window-position={wx},{wy}", f"--window-size={ww},{wh}"])
+        if launch_args:
+            opts["args"] = launch_args
+        license_key = str(getattr(_cfg, "CLOAK_LICENSE_KEY", "") or "").strip()
+        if license_key:
+            opts["license_key"] = license_key
 
-    user_data_dir = str(getattr(_cfg, "CLOAK_USER_DATA_DIR", "") or "").strip()
-    logger.info(
-        "[Cloak] 启动 CloakBrowser：headless=%s humanize=%s geoip=%s proxy=%s locale=%s timezone=%s accept_language=%s persistent=%s",
-        opts.get("headless"), opts.get("humanize"), opts.get("geoip"),
-        proxy_url or "无", opts.get("locale") or "自动/默认", opts.get("timezone") or "自动/默认",
-        locale_opts.get("accept_language") or "自动/默认", bool(user_data_dir),
-    )
-    context_kwargs = {}
-    if locale_opts.get("locale"):
-        context_kwargs["locale"] = locale_opts["locale"]
-    if locale_opts.get("timezone"):
-        context_kwargs["timezone_id"] = locale_opts["timezone"]
-    if locale_opts.get("accept_language"):
-        context_kwargs["extra_http_headers"] = {"Accept-Language": locale_opts["accept_language"]}
+        user_data_dir = str(getattr(_cfg, "CLOAK_USER_DATA_DIR", "") or "").strip()
+        logger.info(
+            "[Cloak] 启动 CloakBrowser：headless=%s humanize=%s geoip=%s proxy=%s locale=%s timezone=%s accept_language=%s persistent=%s has_storage_state=%s",
+            opts.get("headless"), opts.get("humanize"), opts.get("geoip"),
+            proxy_url or "无", opts.get("locale") or "自动/默认", opts.get("timezone") or "自动/默认",
+            locale_opts.get("accept_language") or "自动/默认", bool(user_data_dir), bool(storage_state),
+        )
+        context_kwargs = {}
+        if locale_opts.get("locale"):
+            context_kwargs["locale"] = locale_opts["locale"]
+        if locale_opts.get("timezone"):
+            context_kwargs["timezone_id"] = locale_opts["timezone"]
+        if locale_opts.get("accept_language"):
+            context_kwargs["extra_http_headers"] = {"Accept-Language": locale_opts["accept_language"]}
+        if storage_state:
+            context_kwargs["storage_state"] = storage_state
 
-    if user_data_dir:
-        context = launch_persistent_context(user_data_dir, **opts)
-        page = context.new_page()
-        browser = getattr(context, "browser", None) or context
-        # persistent context 的 locale/timezone 已通过 launch_persistent_context 参数传入。
-    else:
-        browser = launch(**opts)
-        context = browser.new_context(**context_kwargs)
-        page = context.new_page()
+        if user_data_dir:
+            context = launch_persistent_context(user_data_dir, **opts)
+            page = context.new_page()
+            browser = getattr(context, "browser", None) or context
+            # persistent context 的 locale/timezone 已通过 launch_persistent_context 参数传入。
+        else:
+            browser = launch(**opts)
+            context = browser.new_context(**context_kwargs)
+            page = context.new_page()
 
-    driver = CloakSeleniumDriver(browser=browser, context=context, page=page)
-    # Roxy/Cloak 共用部分页面操作函数；给共享函数一个显式日志前缀，
-    # 避免 Cloak 注册流程里出现 `[Roxy注册]`。
-    driver._registration_log_prefix = "[Cloak注册]"
-    driver.set_page_load_timeout(int(getattr(_cfg, "CLOAK_SELENIUM_TIMEOUT", 90) or 90))
-    return driver, CloakOpenResult(raw={"driver": "cloakbrowser", "proxy": proxy_url, "locale": locale_opts, "options": {k: v for k, v in opts.items() if k != "license_key"}})
+        driver = CloakSeleniumDriver(browser=browser, context=context, page=page)
+        driver._is_headless = bool(opts.get("headless"))
+        if not opts.get("headless"):
+            try:
+                from core.cloudflare_turnstile import bring_browser_window_to_front
+                bring_browser_window_to_front(driver)
+            except Exception:
+                pass
+        # Roxy/Cloak 共用部分页面操作函数；给共享函数一个显式日志前缀，
+        # 避免 Cloak 注册流程里出现 `[Roxy注册]`。
+        driver._registration_log_prefix = "[Cloak注册]"
+        driver.set_page_load_timeout(int(getattr(_cfg, "CLOAK_SELENIUM_TIMEOUT", 90) or 90))
+        return driver, CloakOpenResult(raw={"driver": "cloakbrowser", "proxy": proxy_url, "locale": locale_opts, "options": {k: v for k, v in opts.items() if k != "license_key"}})
+    except Exception as exc:
+        if allocated_proxy:
+            try:
+                from core.ip_quota_manager import ip_quota_manager
+                exc_str = str(exc)
+                is_net_err = any(sig in exc_str for sig in (
+                    "ERR_TUNNEL_CONNECTION_FAILED", "ERR_CONNECTION_CLOSED", "ERR_CONNECTION_RESET",
+                    "ERR_PROXY_CONNECTION_FAILED", "ERR_NAME_NOT_RESOLVED", "net::", "Timeout 45000ms exceeded"
+                )) or isinstance(exc, (TimeoutError,))
+                if is_net_err:
+                    ip_quota_manager.record_proxy_failure(allocated_proxy, reason=type(exc).__name__, country=country)
+                else:
+                    ip_quota_manager.release_in_flight(allocated_proxy)
+            except Exception:
+                pass
+        raise

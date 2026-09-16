@@ -615,6 +615,8 @@ def save_account_data(
     output_path: Path | None = None,  # 兼容老接口，已废弃
     email_source: str | None = None,
     proxy_used: str | None = None,
+    country: str | None = None,
+    profile_id: str | None = None,
     batch_dir: Path | None = None,
     auto_plan_check: bool | None = None,
 ) -> int:
@@ -624,6 +626,13 @@ def save_account_data(
     """
     from core.db import insert_account
     extra = dict(extra or {})
+    # 提取 country 与 profile_id
+    if not country:
+        bp = extra.get("browser_profile") or {}
+        country = extra.get("country") or extra.get("geo_country") or bp.get("geo_country")
+    if not profile_id:
+        profile_id = extra.get("profile_id") or extra.get("roxy_profile_id") or extra.get("cloak_profile_id")
+
     # Remail 的 service token 只存在进程内上下文中。注册成功后把订单上下文
     # 一并保存到账号 extra_json，服务重启时查活即可恢复，不再依赖“同一进程
     # 中先领取邮箱”。普通账号列表不会返回 extra_json。
@@ -663,6 +672,8 @@ def save_account_data(
         plan_type=account.get("planType"),
         expires_at=extra.get("expires"),
         proxy_used=proxy_used,
+        country=country,
+        profile_id=profile_id,
         email_source=email_source,
         extra=extra,
         codex_status=codex_status,
@@ -679,6 +690,12 @@ def save_account_data(
         batch_dir=batch_dir,
     )
     logger.info("[Save] 账号及凭证已保存到 SQLite, id=%s, email=%s", row_id, email)
+
+    try:
+        from core.gptgrok2api_sync import on_account_completed
+        on_account_completed(email)
+    except Exception as g_exc:
+        logger.warning("[gptGrok2api] 同步检查异常: %s", g_exc)
 
     auto_twofa = False
     try:

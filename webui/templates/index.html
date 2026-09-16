@@ -146,8 +146,11 @@
     .mono { font-family: ui-monospace, "JetBrains Mono", Consolas, monospace; font-size: 12px; }
     .muted { color: var(--muted); }
     .pill { display: inline-flex; min-width: 48px; justify-content: center; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-    .status-available, .status-pending { color: var(--blue); background: #eef4ff; }
-    .status-used, .status-cancelled, .status-stopped, .status-disabled { color: #475467; background: #f2f4f7; }
+    .status-available { color: #166534; background: #edf8f1; }
+    .status-pending { color: var(--blue); background: #eef4ff; }
+    .status-used { color: var(--blue); background: #eef4ff; }
+    .status-banned { color: #b91c1c; background: #fee2e2; font-weight: 600; }
+    .status-cancelled, .status-stopped, .status-disabled { color: #475467; background: #f2f4f7; }
     .status-stopping { color: var(--amber); background: #fff7e6; }
     .status-failed { color: var(--red); background: #fff0ef; }
     .status-partial_success { color: #9a6700; background: #fff7d6; }
@@ -1453,10 +1456,13 @@
       font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
     }
     .outlook-table-v2 .pill.status-available {
-      color: #377DFF; background: #EBF2FF; border-color: #9BBEFF;
+      color: #15803d; background: #f0fdf4; border-color: #bbf7d0;
     }
     .outlook-table-v2 .pill.status-used {
-      color: #909399; background: #f4f4f5; border-color: #e4e7ed;
+      color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe;
+    }
+    .outlook-table-v2 .pill.status-banned {
+      color: #b91c1c; background: #fef2f2; border-color: #fca5a5; font-weight: 600;
     }
     .outlook-table-v2 .pill.status-failed {
       color: #f56c6c; background: #fef0f0; border-color: #fbc4c4;
@@ -2012,6 +2018,239 @@
       .config-overview-v2-title { font-size: 24px; }
     }
 
+    /* ---- 代理国家与住宅宽带分配面板 ---- */
+    .proxy-dist-panel {
+      margin-top: 18px;
+      margin-bottom: 22px;
+      padding: 18px 22px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .proxy-dist-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .proxy-dist-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .proxy-dist-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .proxy-dist-subtitle {
+      font-size: 12px;
+      color: #64748b;
+      margin: 0;
+    }
+    .proxy-dist-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .proxy-dist-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 30px;
+      padding: 0 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #334155;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .proxy-dist-btn:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+    }
+    .proxy-dist-btn--primary {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #ffffff;
+    }
+    .proxy-dist-btn--primary:hover {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+    .proxy-dist-btn--res-active {
+      background: #7c3aed;
+      border-color: #6d28d9;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(124, 58, 237, 0.4);
+    }
+    .proxy-dist-btn--res-active:hover {
+      background: #6d28d9;
+      border-color: #5b21b6;
+      color: #ffffff;
+    }
+    .proxy-dist-bar-wrap {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border: 1px solid #f1f5f9;
+    }
+    .proxy-dist-bar-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+    .proxy-dist-bar {
+      display: flex;
+      height: 10px;
+      border-radius: 5px;
+      overflow: hidden;
+      background: #e2e8f0;
+    }
+    .proxy-dist-bar-seg {
+      height: 100%;
+      transition: width 0.2s ease;
+    }
+    .proxy-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .proxy-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+    .proxy-card:hover {
+      border-color: #cbd5e1;
+      background: #ffffff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .proxy-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .proxy-card-country {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .proxy-card-flag {
+      font-size: 17px;
+    }
+    .proxy-card-stats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .proxy-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .proxy-badge--clean {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+    .proxy-badge--res {
+      background: #f3e8ff;
+      color: #7e22ce;
+      border: 1px solid #e9d5ff;
+    }
+    .proxy-badge--ips {
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+    }
+    .proxy-badge--clean.is-disabled {
+      background: #f1f5f9;
+      color: #94a3b8;
+      border-color: #e2e8f0;
+      opacity: 0.75;
+    }
+    .proxy-badge--clean.is-disabled strong {
+      text-decoration: line-through;
+    }
+    .proxy-badge--res.is-active {
+      background: #f3e8ff;
+      color: #6b21a8;
+      border-color: #d8b4fe;
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(147, 51, 234, 0.15);
+    }
+    .proxy-tag-res-only {
+      display: inline-block;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 4px;
+      background: #ede9fe;
+      color: #6d28d9;
+      margin-left: 4px;
+    }
+    .proxy-card-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 2px;
+    }
+    .proxy-slider {
+      flex: 1;
+      accent-color: #3b82f6;
+      cursor: pointer;
+    }
+    .proxy-pct-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      width: 64px;
+    }
+    .proxy-pct-input {
+      width: 44px;
+      height: 26px;
+      padding: 0 4px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      text-align: right;
+      font-size: 12px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .proxy-pct-symbol {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
   </style>
 </head>
 <body>
@@ -2099,7 +2338,7 @@
       <div class="stats">
         <div class="stat">
           <div class="stat-top">
-            <span>已注册</span>
+            <span>已注册 GPT</span>
             <div class="stat-icon stat-icon--accounts" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </div>
@@ -2117,7 +2356,7 @@
         </div>
         <div class="stat">
           <div class="stat-top">
-            <span>可用</span>
+            <span>未使用</span>
             <div class="stat-icon stat-icon--available" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             </div>
@@ -2126,7 +2365,7 @@
         </div>
         <div class="stat">
           <div class="stat-top">
-            <span>已用</span>
+            <span>已用 (池)</span>
             <div class="stat-icon stat-icon--used" aria-hidden="true">
               <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
             </div>
@@ -2135,7 +2374,7 @@
         </div>
         <div class="stat">
           <div class="stat-top">
-            <span>失败</span>
+            <span>已封禁/失败</span>
             <div class="stat-icon stat-icon--failed" aria-hidden="true">
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             </div>
@@ -2144,6 +2383,38 @@
         </div>
       </div>
     </div>
+
+    <!-- 代理国家节点监控与注册分流权重面板 -->
+    <section class="proxy-dist-panel" id="proxyDistributionPanel" aria-label="代理国家与住宅宽带分配">
+      <div class="proxy-dist-header">
+        <div class="proxy-dist-title-group">
+          <h3 class="proxy-dist-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            代理国家节点监控与权重分流
+          </h3>
+          <p class="proxy-dist-subtitle">实时监控已配国家干净可用节点与住宅宽带数量，按百分比智能加权轮换分流</p>
+        </div>
+        <div class="proxy-dist-actions">
+          <button type="button" class="proxy-dist-btn" id="btnRefreshProxyStats" title="重新从本地 Resin 网关探测并刷新节点健康数据">🔄 刷新节点</button>
+          <button type="button" class="proxy-dist-btn" id="btnToggleCleanNodes" title="关闭非住宅干净节点，仅保留各国家住宅宽带与住宅IP参与轮询">🛡️ 纯住宅模式 (关闭普通节点)</button>
+          <button type="button" class="proxy-dist-btn" id="btnAutoWeightByResidential" title="按各国家已发现的住宅宽带数量比例自动分配百分比">💡 按住宅比例算比</button>
+          <button type="button" class="proxy-dist-btn" id="btnEqualWeight" title="平均分配所有配置国家的百分比">⚖️ 均分比例</button>
+          <button type="button" class="proxy-dist-btn proxy-dist-btn--primary" id="btnSaveProxyWeights" title="保存国家分流百分比并在后续注册中即时生效">💾 保存权重</button>
+        </div>
+      </div>
+
+      <div class="proxy-dist-bar-wrap">
+        <div class="proxy-dist-bar-header">
+          <span>流量分流占比预览</span>
+          <span id="proxyTotalWeightLabel" style="font-weight:700; color:#15803d;">总比例: 100%</span>
+        </div>
+        <div class="proxy-dist-bar" id="proxyDistBar"></div>
+      </div>
+
+      <div class="proxy-cards-grid" id="proxyCardsGrid">
+        <div style="grid-column:1/-1; text-align:center; padding:20px; color:#94a3b8; font-size:13px;">加载代理节点数据中…</div>
+      </div>
+    </section>
 
     <section class="jobs-panel-v2" id="jobsPanelV2" aria-label="注册任务">
       <div class="jobs-toolbar-v2" id="jobsToolbarV2">
@@ -2262,8 +2533,9 @@
       </div>
       <div class="jobs-toolbar-v2" id="accountsToolbarV2">
         <div class="acc-v2-btn-group">
-          <span class="acc-v2-btn-group-title">套餐/提链</span>
+          <span class="acc-v2-btn-group-title">保活/养号</span>
           <button type="button" class="jobs-tb-btn jobs-tb-btn--primary" id="btnCheckSelectedLiveV2" onclick="checkSelectedLive()" title="重新登录选中账号；成功且未封号则标记正常，并刷新最新 AT/accessToken">查活</button>
+          <button type="button" class="jobs-tb-btn jobs-tb-btn--good" id="btnWarmSelectedAccountsV2" onclick="warmSelectedAccounts()" disabled title="启动指纹浏览器对选中的账号进行拟人养号（自然对话、滚屏阅读与交互）">拟人养号</button>
           <button type="button" class="jobs-tb-btn jobs-tb-btn--primary" id="btnCheckSelectedPlansV2" disabled title="查询选中账号当前套餐；free 账号会检查 Plus 试用资格">查套餐</button>
           <button type="button" class="jobs-tb-btn jobs-tb-btn--good" id="btnExtractSelectedLinksV2" disabled title="给选中的 free(可Plus试用) 账号批量提链，类型按配置 PIX/UPI/KAKAO_PAY/IDEAL">提链</button>
         </div>
@@ -2342,6 +2614,12 @@
         <button class="btn" id="btnCloseEmailChangeLog" style="float:right;min-height:28px;">关闭</button>
       </h3>
       <div class="log" id="emailChangeLogContent">加载中…</div>
+    </div>
+    <div class="body hidden" id="warmingLogPanel">
+      <h3>养号日志：<span id="warmingLogEmail" style="font-size:13px;font-weight:400;color:var(--muted);"></span>
+        <button class="btn" id="btnCloseWarmingLog" style="float:right;min-height:28px;">关闭</button>
+      </h3>
+      <div class="log" id="warmingLogContent">加载中…</div>
     </div>
   </div>
 
@@ -2440,10 +2718,23 @@
           </div>
           <input type="hidden" id="poolSourceV2" value="all">
         </div>
+        <div class="outlook-v2-select" id="poolStatusV2Wrap">
+          <button type="button" class="outlook-v2-select-btn" id="poolStatusV2Btn" aria-haspopup="listbox" aria-expanded="false">全部状态</button>
+          <div class="outlook-v2-select-menu" role="listbox">
+            <button type="button" class="outlook-v2-select-item is-active" data-value="" role="option">全部状态</button>
+            <button type="button" class="outlook-v2-select-item" data-value="available" role="option">未使用</button>
+            <button type="button" class="outlook-v2-select-item" data-value="used" role="option">已注册 GPT</button>
+            <button type="button" class="outlook-v2-select-item" data-value="banned" role="option">已封禁</button>
+            <button type="button" class="outlook-v2-select-item" data-value="disabled" role="option">已停用</button>
+            <button type="button" class="outlook-v2-select-item" data-value="failed" role="option">失败</button>
+          </div>
+          <input type="hidden" id="poolStatusV2" value="">
+        </div>
         <div class="acc-v2-btn-group acc-v2-search-wrap">
           <input id="qOutlookV2" type="search" placeholder="搜索邮箱、状态…" autocomplete="off">
         </div>
-        <button type="button" class="jobs-tb-btn jobs-tb-btn--good" id="btnMarkSelectedOutlookAvailableV2" disabled title="把选中的邮箱批量标记为未使用/可用">标记未使用</button>
+        <button type="button" class="jobs-tb-btn jobs-tb-btn--good" id="btnMarkSelectedOutlookAvailableV2" disabled title="把选中的邮箱批量标记为未使用">标记未使用</button>
+        <button type="button" class="jobs-tb-btn jobs-tb-btn--danger" id="btnBanSelectedOutlookV2" disabled title="把选中的邮箱批量标记为已封禁">标已封禁</button>
         <button type="button" class="jobs-tb-btn" id="btnDisableSelectedOutlookV2" disabled title="批量停用选中的邮箱；停用后不会被注册任务领取">停用选中</button>
         <button type="button" class="jobs-tb-btn" id="btnFailSelectedOutlookV2" disabled title="批量标记选中的邮箱为失败">标失败</button>
         <button type="button" class="jobs-tb-btn jobs-tb-btn--danger" id="btnDeleteSelectedOutlookV2" disabled title="批量删除选中的邮箱素材">删除选中</button>
@@ -2758,16 +3049,43 @@ function short(v, n=40) { const s = v || ''; return s.length > n ? s.slice(0,n)+
 function copyId(v) { if (!v) return ''; const id = 'c'+(++copySeq); copyStore.set(id, v); return id; }
 function cbtn(label, value, cls='') { const id = copyId(value); return `<button class="${cls}" data-copy-id="${id}" ${id?'':'disabled'}>${label}</button>`; }
 function pill(status) {
-  const map = { available:'可用', used:'已用', failed:'失败', partial_success:'部分成功', disabled:'已停用', pending:'排队', running:'运行中', stopping:'停止中', stopped:'已停止', success:'成功', cancelled:'已取消' };
+  const map = {
+    available: '未使用',
+    used: '已注册 GPT',
+    banned: '已封禁',
+    failed: '失败',
+    partial_success: '部分成功',
+    disabled: '已停用',
+    pending: '排队',
+    running: '运行中',
+    stopping: '停止中',
+    stopped: '已停止',
+    success: '成功',
+    cancelled: '已取消'
+  };
   return `<span class="pill status-${esc(status)}">${esc(map[status]||status||'-')}</span>`;
 }
 function pillV2(status) {
   const s = String(status || '');
-  const map = { available:'可用', used:'已用', failed:'失败', partial_success:'部分成功', disabled:'已停用', pending:'排队', running:'运行中', stopping:'停止中', stopped:'已停止', success:'成功', cancelled:'已取消' };
+  const map = {
+    available: '未使用',
+    used: '已注册 GPT',
+    banned: '已封禁',
+    failed: '失败',
+    partial_success: '部分成功',
+    disabled: '已停用',
+    pending: '排队',
+    running: '运行中',
+    stopping: '停止中',
+    stopped: '已停止',
+    success: '成功',
+    cancelled: '已取消'
+  };
   let cls = 'jobs-v2-pill--muted';
-  if (s === 'success') cls = 'jobs-v2-pill--success';
-  else if (s === 'failed') cls = 'jobs-v2-pill--failed';
+  if (s === 'success' || s === 'available') cls = 'jobs-v2-pill--success';
+  else if (s === 'failed' || s === 'banned') cls = 'jobs-v2-pill--failed';
   else if (s === 'running' || s === 'stopping') cls = 'jobs-v2-pill--running';
+  else if (s === 'used') cls = 'jobs-v2-pill--primary';
   else if (s === 'pending' || s === 'cancelled' || s === 'stopped') cls = 'jobs-v2-pill--muted';
   return `<span class="jobs-v2-pill ${cls}">${esc(map[s]||s||'-')}</span>`;
 }
@@ -2834,9 +3152,260 @@ function activateTab(tab, persist=true) {
   if (tab === 'codex') loadCodex();
   if (tab === 'outlook') loadOutlook();
   if (tab === 'config') loadConfig();
-  if (tab === 'register') refreshJobs();
+  if (tab === 'register') { refreshJobs(); loadProxyStats(); }
 }
 $$('nav button').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.tab)));
+
+// ---------- 代理国家节点监控与注册分流权重 ----------
+let PROXY_COUNTRY_ITEMS = [];
+let PROXY_RESIDENTIAL_ONLY = false;
+const COUNTRY_COLORS = {
+  JP: '#8b5cf6', // purple
+  GB: '#06b6d4', // cyan
+  US: '#f59e0b', // amber
+  DE: '#10b981', // emerald
+  SG: '#f43f5e', // rose
+  CA: '#3b82f6', // blue
+  NL: '#ec4899', // pink
+};
+
+async function loadProxyStats(refresh = false) {
+  try {
+    const url = refresh ? '/api/proxy/refresh-stats' : '/api/proxy/country-stats';
+    const method = refresh ? 'POST' : 'GET';
+    const res = await api(url, { method });
+    if (!res || !res.ok) return;
+    PROXY_COUNTRY_ITEMS = res.items || [];
+    PROXY_RESIDENTIAL_ONLY = !!res.residential_only;
+    updateCleanNodesToggleBtn();
+    renderProxyCards();
+  } catch (e) {
+    console.error('加载代理国家统计失败:', e);
+  }
+}
+
+function updateCleanNodesToggleBtn() {
+  const btn = $('#btnToggleCleanNodes');
+  if (!btn) return;
+  if (PROXY_RESIDENTIAL_ONLY) {
+    btn.classList.add('proxy-dist-btn--res-active');
+    btn.innerHTML = '🟢 开启干净节点 (恢复全量)';
+    btn.title = '当前为纯住宅模式（普通干净节点已关闭）。点击后将重新恢复所有干净可用节点加入轮询池';
+  } else {
+    btn.classList.remove('proxy-dist-btn--res-active');
+    btn.innerHTML = '🛡️ 纯住宅模式 (关闭普通节点)';
+    btn.title = '当前为全量干净节点模式。点击后关闭非住宅干净节点，所有国家仅保留住宅宽带与住宅IP参与轮询';
+  }
+}
+
+async function toggleCleanNodes() {
+  const btn = $('#btnToggleCleanNodes');
+  const targetState = !PROXY_RESIDENTIAL_ONLY;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '切换中…';
+  }
+  try {
+    const res = await api('/api/proxy/toggle-residential-only', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: targetState })
+    });
+    if (res && res.ok) {
+      PROXY_RESIDENTIAL_ONLY = !!res.residential_only;
+      if (Array.isArray(res.items)) {
+        PROXY_COUNTRY_ITEMS = res.items;
+      }
+      updateCleanNodesToggleBtn();
+      renderProxyCards();
+      if (res.warnings && res.warnings.length) {
+        showToast(res.warnings.join('; '));
+      } else if (PROXY_RESIDENTIAL_ONLY) {
+        showToast('已关闭普通干净节点，所有国家仅保留住宅宽带与住宅IP参与轮询！');
+      } else {
+        showToast('已开启干净节点，所有干净可用节点已恢复参与轮询！');
+      }
+    } else {
+      showToast(res?.error || '切换模式失败');
+      updateCleanNodesToggleBtn();
+    }
+  } catch (e) {
+    showToast('操作失败: ' + e.message);
+    updateCleanNodesToggleBtn();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderProxyCards() {
+  const container = $('#proxyCardsGrid');
+  if (!container || !PROXY_COUNTRY_ITEMS.length) return;
+
+  container.innerHTML = PROXY_COUNTRY_ITEMS.map(item => {
+    const c = item.country;
+    const color = COUNTRY_COLORS[c] || '#64748b';
+    const resPct = item.clean_nodes > 0 ? Math.round((item.residential_nodes / item.clean_nodes) * 100) : 0;
+    const routableBadge = PROXY_RESIDENTIAL_ONLY
+      ? `路由: ${item.routable_nodes} 节点 <span class="proxy-tag-res-only">纯住宅</span>`
+      : `路由: ${item.routable_nodes} 节点`;
+
+    const cleanBadge = PROXY_RESIDENTIAL_ONLY
+      ? `<span class="proxy-badge proxy-badge--clean is-disabled" title="当前已关闭普通干净节点参与轮询">
+          ⚪ 干净: <strong>${item.clean_nodes}</strong> <small>(已排除)</small>
+        </span>`
+      : `<span class="proxy-badge proxy-badge--clean" title="存活且未触发熔断的干净可用节点数">
+          🟢 干净: <strong>${item.clean_nodes}</strong>
+        </span>`;
+
+    const resBadge = PROXY_RESIDENTIAL_ONLY
+      ? `<span class="proxy-badge proxy-badge--res is-active" title="纯住宅模式生效中：仅住宅节点参与路由">
+          🏠 住宅: <strong>${item.residential_nodes}</strong> <small>(${resPct}%)</small> ★
+        </span>`
+      : `<span class="proxy-badge proxy-badge--res" title="经检测判定为非机房家庭住宅宽带的节点数">
+          🏠 住宅: <strong>${item.residential_nodes}</strong> <small>(${resPct}%)</small>
+        </span>`;
+
+    return `
+      <div class="proxy-card" data-country="${c}">
+        <div class="proxy-card-top">
+          <div class="proxy-card-country">
+            <span class="proxy-card-flag">${item.flag || '🌐'}</span>
+            <span>${esc(item.name)} (${c})</span>
+          </div>
+          <span style="font-size:11px; color:#64748b; font-weight:600;">${routableBadge}</span>
+        </div>
+        <div class="proxy-card-stats">
+          ${cleanBadge}
+          ${resBadge}
+          <span class="proxy-badge proxy-badge--ips" title="已发现的独立出口住宅IP数">
+            🌐 住宅IP: <strong>${item.residential_ips}</strong>
+          </span>
+        </div>
+        <div class="proxy-card-slider-row">
+          <input type="range" class="proxy-slider" min="0" max="100" step="1" value="${item.weight}" data-country="${c}" style="accent-color:${color};">
+          <div class="proxy-pct-input-wrap">
+            <input type="number" class="proxy-pct-input" min="0" max="100" step="1" value="${item.weight}" data-country="${c}">
+            <span class="proxy-pct-symbol">%</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.proxy-slider').forEach(slider => {
+    slider.addEventListener('input', (e) => {
+      const country = e.target.getAttribute('data-country');
+      const val = parseFloat(e.target.value) || 0;
+      const input = container.querySelector(`.proxy-pct-input[data-country="${country}"]`);
+      if (input) input.value = val;
+      const item = PROXY_COUNTRY_ITEMS.find(x => x.country === country);
+      if (item) item.weight = val;
+      updateDistBar();
+    });
+  });
+
+  container.querySelectorAll('.proxy-pct-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const country = e.target.getAttribute('data-country');
+      const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+      const slider = container.querySelector(`.proxy-slider[data-country="${country}"]`);
+      if (slider) slider.value = val;
+      const item = PROXY_COUNTRY_ITEMS.find(x => x.country === country);
+      if (item) item.weight = val;
+      updateDistBar();
+    });
+  });
+
+  updateDistBar();
+}
+
+function updateDistBar() {
+  const bar = $('#proxyDistBar');
+  const totalLabel = $('#proxyTotalWeightLabel');
+  if (!bar || !PROXY_COUNTRY_ITEMS.length) return;
+
+  const total = PROXY_COUNTRY_ITEMS.reduce((sum, x) => sum + (parseFloat(x.weight) || 0), 0);
+  const roundedTotal = Math.round(total * 10) / 10;
+
+  if (totalLabel) {
+    totalLabel.textContent = `总比例: ${roundedTotal}%`;
+    totalLabel.style.color = (Math.abs(roundedTotal - 100) < 0.1) ? '#15803d' : '#e11d48';
+  }
+
+  bar.innerHTML = PROXY_COUNTRY_ITEMS.map(item => {
+    const w = parseFloat(item.weight) || 0;
+    if (w <= 0) return '';
+    const pct = total > 0 ? (w / total) * 100 : 0;
+    const color = COUNTRY_COLORS[item.country] || '#64748b';
+    return `<div class="proxy-dist-bar-seg" style="width:${pct}%; background:${color};" title="${item.name}: ${w}%"></div>`;
+  }).join('');
+}
+
+function autoWeightByResidential() {
+  const totalRes = PROXY_COUNTRY_ITEMS.reduce((sum, x) => sum + (x.residential_nodes || 0), 0);
+  if (totalRes <= 0) {
+    showToast('当前未发现住宅宽带节点，无法按住宅比例分配');
+    return;
+  }
+  let assigned = 0;
+  PROXY_COUNTRY_ITEMS.forEach((item, idx) => {
+    if (idx === PROXY_COUNTRY_ITEMS.length - 1) {
+      item.weight = Math.max(0, 100 - assigned);
+    } else {
+      const pct = Math.round((item.residential_nodes / totalRes) * 100);
+      item.weight = pct;
+      assigned += pct;
+    }
+  });
+  renderProxyCards();
+  showToast('已根据各国家住宅宽带数量自动配比！');
+}
+
+function equalWeight() {
+  const n = PROXY_COUNTRY_ITEMS.length;
+  if (n <= 0) return;
+  const base = Math.floor(100 / n);
+  let rem = 100 - base * n;
+  PROXY_COUNTRY_ITEMS.forEach((item, idx) => {
+    item.weight = base + (idx < rem ? 1 : 0);
+  });
+  renderProxyCards();
+  showToast('已均分各国家比例');
+}
+
+async function saveProxyWeights() {
+  const btn = $('#btnSaveProxyWeights');
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  const weights = {};
+  PROXY_COUNTRY_ITEMS.forEach(item => {
+    weights[item.country] = parseFloat(item.weight) || 0;
+  });
+  try {
+    const res = await api('/api/proxy/country-weights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weights })
+    });
+    if (res && res.ok) {
+      showToast('国家分流比例保存成功，已即时生效！');
+      updateDistBar();
+    } else {
+      showToast(res?.error || '保存失败');
+    }
+  } catch (e) {
+    showToast('保存失败: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 保存权重'; }
+  }
+}
+
+async function refreshProxyStats() {
+  const btn = $('#btnRefreshProxyStats');
+  if (btn) { btn.disabled = true; btn.textContent = '探测中…'; }
+  await loadProxyStats(true);
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 刷新节点'; }
+  showToast('已从网关重新探测并更新数据');
+}
 
 // ---------- 概览 ----------
 async function loadSummary() {
@@ -2846,7 +3415,9 @@ async function loadSummary() {
     $('#statOutlook').textContent = s.outlook_total;
     $('#statAvailable').textContent = s.outlook_available;
     $('#statUsed').textContent = s.outlook_used;
-    $('#statFailed').textContent = s.outlook_failed;
+    const bannedOrFailed = Number(s.outlook_banned || 0) + Number(s.outlook_failed || 0);
+    $('#statFailed').textContent = bannedOrFailed;
+    loadProxyStats();
   } catch(e) {}
 }
 
@@ -2958,6 +3529,17 @@ function bindJobsBodyEvents(bodyEl) {
   if (cancelV2) cancelV2.addEventListener('click', () => cancelAllPendingJobs(cancelV2));
   const refreshV2 = $('#btnRefreshJobsV2');
   if (refreshV2) refreshV2.addEventListener('click', refreshJobs);
+
+  const btnRefProxy = $('#btnRefreshProxyStats');
+  if (btnRefProxy) btnRefProxy.addEventListener('click', refreshProxyStats);
+  const btnToggleClean = $('#btnToggleCleanNodes');
+  if (btnToggleClean) btnToggleClean.addEventListener('click', toggleCleanNodes);
+  const btnAutoProxy = $('#btnAutoWeightByResidential');
+  if (btnAutoProxy) btnAutoProxy.addEventListener('click', autoWeightByResidential);
+  const btnEqProxy = $('#btnEqualWeight');
+  if (btnEqProxy) btnEqProxy.addEventListener('click', equalWeight);
+  const btnSaveProxy = $('#btnSaveProxyWeights');
+  if (btnSaveProxy) btnSaveProxy.addEventListener('click', saveProxyWeights);
 
   function stepInputNumber(inputId, delta) {
     const el = document.getElementById(inputId);
@@ -3577,10 +4159,21 @@ function _tokenCellV2(r) {
   else if (live === 'running') liveHtml = `<div class="acc-v2-sub" title="${esc(liveAt)}" style="color:#e6a23c">查活: 运行中</div>`;
   else if (live === 'deactivated') liveHtml = `<div class="acc-v2-sub" title="${esc(liveErr || liveAt)}" style="color:#f56c6c">查活: 已废</div>`;
   else if (live === 'failed') liveHtml = `<div class="acc-v2-sub" title="${esc(liveErr || liveAt)}" style="color:#e6a23c">查活: 失败</div>`;
+
+  const warm = r.warming_status || '';
+  const warmCount = r.warm_count || 0;
+  const lastWarm = r.last_warmed_at || '';
+  const warmErr = r.warming_error || '';
+  let warmHtml = '';
+  if (warm === 'success') warmHtml = `<div class="acc-v2-sub" title="${esc([lastWarm ? '上次养号: ' + lastWarm : '', r.last_warm_action ? '动作: ' + r.last_warm_action : '', r.last_warm_prompt ? '提问: ' + r.last_warm_prompt : '', r.last_warm_dwell ? '停留: ' + r.last_warm_dwell + 's' : ''].filter(Boolean).join('\n'))}" style="color:#67c23a">养号: ${warmCount}次</div>`;
+  else if (warm === 'queued') warmHtml = `<div class="acc-v2-sub" style="color:#e6a23c">养号: 排队</div>`;
+  else if (warm === 'running') warmHtml = `<div class="acc-v2-sub" style="color:#409eff">养号: 运行中</div>`;
+  else if (warm === 'failed') warmHtml = `<div class="acc-v2-sub" title="${esc(warmErr)}" style="color:#f56c6c">养号: 失败</div>`;
+
   if (r.has_access_token) {
-    return `<button type="button" class="acc-v2-token-copy" data-account-copy-secret="access_token" data-account-id="${esc(r.id)}" title="复制完整 Token">复制</button>${liveHtml}`;
+    return `<button type="button" class="acc-v2-token-copy" data-account-copy-secret="access_token" data-account-id="${esc(r.id)}" title="复制完整 Token">复制</button>${liveHtml}${warmHtml}`;
   }
-  return `<span class="pill status-failed">无Token</span>${liveHtml}`;
+  return `<span class="pill status-failed">无Token</span>${liveHtml}${warmHtml}`;
 }
 function _accountsV2MoreMenu(r) {
   const parts = [
@@ -3589,6 +4182,8 @@ function _accountsV2MoreMenu(r) {
     `<button type="button" data-account-change-email="${esc(r.id)}" title="从指定邮箱来源领取新邮箱并换绑">换绑邮箱</button>`,
     `<button type="button" data-account-change-email-log="${esc(r.id)}" title="查看最近一次邮箱换绑日志">换绑日志</button>`,
     `<button type="button" onclick="checkSelectedLive([Number('${esc(r.id)}')], this); return false;" title="重新登录该账号，成功则刷新最新 AT/accessToken">查活刷新AT</button>`,
+    `<button type="button" onclick="warmSelectedAccounts([Number('${esc(r.id)}')]); return false;" title="使用指纹浏览器执行一次拟人养号（自然对话、阅读与交互）">拟人养号</button>`,
+    `<button type="button" onclick="openWarmingLog('${esc(r.email)}'); return false;" title="查看该账号最近一次拟人养号日志">养号日志</button>`,
     `<button type="button" data-account-live-log="${esc(r.email)}" title="查看该账号最近一次查活日志">查活日志</button>`,
     `<button type="button" data-account-totp-log="${esc(r.email)}" title="查看该账号最近一次 2FA 设置日志">2FA日志</button>`,
     _planAction(r),
@@ -3670,7 +4265,7 @@ function updateAccountSelectionUi(pageRows = null) {
   const archiveLabel = SHOW_ARCHIVED_ACCOUNTS ? '恢复选中' : '归档选中';
   const archiveTitle = SHOW_ARCHIVED_ACCOUNTS ? '把选中的归档账号恢复到默认账号列表' : '归档选中的账号；默认账号列表将不再查询/显示这些账号';
   const v2Ids = [
-    'btnCheckSelectedPlansV2', 'btnExtractSelectedLinksV2',
+    'btnWarmSelectedAccountsV2', 'btnCheckSelectedPlansV2', 'btnExtractSelectedLinksV2',
     'btnRetrySelectedCodexV2', 'btnDownloadSelectedCpaV2', 'btnStopSelectedCodexV2',
     'btnSetupSelectedTotpV2', 'btnChangeSelectedEmailsV2', 'btnNoteSelectedAccountsV2', 'btnCopySelectedLinesV2', 'btnCopySelectedTokensV2', 'btnCopySelectedEmailsV2',
     'btnDownloadSelectedTxtV2', 'btnArchiveSelectedAccountsV2', 'btnDeleteSelectedAccountsV2',
@@ -4819,6 +5414,77 @@ async function checkSelectedLive(idsArg = null, btnArg = null) {
   }
 }
 
+async function warmSelectedAccounts(idsArg = null) {
+  const ids = idsArg || Array.from(ACCOUNT_SELECTED);
+  if (ids.length === 0) { showToast('请先选择账号'); return; }
+  const count = ids.length;
+  if (!confirm(`确定对选中的 ${count} 个账号执行指纹浏览器拟人养号吗？\n\n- 优先复用上次 StorageState 免密秒进（失效自动重登）\n- 模拟人类三阶贝塞尔鼠标轨迹与打字延迟\n- 混合行为：自然日常问答、滚屏阅读、翻看历史\n- 运行完成后自动保存更新状态与日志`)) return;
+  const btn = $('#btnWarmSelectedAccountsV2');
+  const oldText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '提交中…';
+  }
+  try {
+    const r = await api('/api/accounts/warm-bulk', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account_ids: ids}),
+    });
+    showToast(`已提交 ${r.submitted || 0} 个养号任务${r.skipped ? `，跳过/忙碌 ${r.skipped}` : ''}`);
+    const firstAcc = ACCOUNTS.find(a => Number(a.id) === Number(ids[0]));
+    if (firstAcc?.email) openWarmingLog(firstAcc.email);
+    await loadAccounts();
+  } catch(err) {
+    showToast('提交养号任务失败: ' + err.message);
+  } finally {
+    if (btn) {
+      btn.textContent = oldText;
+      btn.disabled = false;
+    }
+  }
+}
+
+let warmingLogTimer = null;
+function openWarmingLog(email) {
+  if (!email) return;
+  const panel = $('#warmingLogPanel');
+  const title = $('#warmingLogEmail');
+  const content = $('#warmingLogContent');
+  if (panel && title && content) {
+    title.textContent = email;
+    content.textContent = '加载中…';
+    panel.classList.remove('hidden');
+    pollWarmingLog(email);
+  }
+}
+
+async function pollWarmingLog(email) {
+  if (warmingLogTimer) clearTimeout(warmingLogTimer);
+  try {
+    const res = await api(`/api/accounts/warming-log?email=${encodeURIComponent(email)}`);
+    const content = $('#warmingLogContent');
+    if (content) {
+      content.textContent = res.content || (res.running ? '任务正在执行中，等待日志写入…' : '暂无养号日志');
+      content.scrollTop = content.scrollHeight;
+    }
+  } catch(e) {}
+  const panel = $('#warmingLogPanel');
+  if (panel && !panel.classList.contains('hidden')) {
+    warmingLogTimer = setTimeout(() => pollWarmingLog(email), 2500);
+  }
+}
+
+(function bindWarmingLogEvents() {
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btnCloseWarmingLog') {
+      const panel = $('#warmingLogPanel');
+      if (panel) panel.classList.add('hidden');
+      if (warmingLogTimer) clearTimeout(warmingLogTimer);
+    }
+  });
+})();
+
 async function deleteAccount(id, email, btn) {
   if (!confirm(`确定删除账号 #${id}？\n\n${email || ''}\n\n会从本地账号列表、注册成功邮箱和 token 文件中移除。`)) return;
   btn.disabled = true;
@@ -5116,6 +5782,37 @@ function setPoolSourceV2(val) {
     });
   }
 }
+function getPoolStatus() {
+  const v2 = document.getElementById('poolStatusV2');
+  return (v2 && v2.value) || '';
+}
+const POOL_STATUS_LABELS = {
+  '': '全部状态',
+  available: '未使用',
+  used: '已注册 GPT',
+  banned: '已封禁',
+  disabled: '已停用',
+  failed: '失败',
+};
+function setPoolStatusV2(val) {
+  const hidden = document.getElementById('poolStatusV2');
+  const btn = document.getElementById('poolStatusV2Btn');
+  const wrap = document.getElementById('poolStatusV2Wrap');
+  if (!hidden) return;
+  const next = POOL_STATUS_LABELS[val] !== undefined ? val : '';
+  hidden.value = next;
+  if (btn) btn.textContent = POOL_STATUS_LABELS[next] || '全部状态';
+  if (wrap) {
+    wrap.querySelectorAll('.outlook-v2-select-item').forEach(item => {
+      item.classList.toggle('is-active', item.dataset.value === next);
+    });
+  }
+}
+function onPoolStatusChange() {
+  PAGERS.outlook.page = 1;
+  OUTLOOK_SELECTED.clear();
+  loadOutlook();
+}
 function getOutlookQuery() {
   const el = document.getElementById('qOutlookV2');
   return (el ? el.value : '').trim();
@@ -5127,9 +5824,11 @@ function poolLabel(src) {
 async function loadOutlook() {
   try {
     const source = getPoolSource();
+    const status = getPoolStatus();
     const q = getOutlookQuery();
     const p = PAGERS.outlook;
-    const res = await api(`/api/outlook?paged=1&page=${encodeURIComponent(p.page)}&page_size=${encodeURIComponent(p.size)}&source=${encodeURIComponent(source)}&q=${encodeURIComponent(q)}`);
+    const statusParam = status ? `&status=${encodeURIComponent(status)}` : '';
+    const res = await api(`/api/outlook?paged=1&page=${encodeURIComponent(p.page)}&page_size=${encodeURIComponent(p.size)}&source=${encodeURIComponent(source)}${statusParam}&q=${encodeURIComponent(q)}`);
     OUTLOOK = res.items || [];
     OUTLOOK_TOTAL = Number(res.total || OUTLOOK.length || 0);
     const totalPages = Math.max(1, Math.ceil(OUTLOOK_TOTAL / p.size));
@@ -5169,7 +5868,8 @@ function _outlookMoreMenu(r) {
   const items = [
     cbtn('复制Token', r.access_token, 'good'),
     cbtn('复制整行', r.account_copy_line, 'good'),
-    r.status !== 'available' ? `<button type="button" data-pool-act="available" data-email="${email}" data-source="${src}">恢复可用</button>` : '',
+    r.status !== 'available' ? `<button type="button" data-pool-act="available" data-email="${email}" data-source="${src}">设为未使用</button>` : '',
+    r.status !== 'banned' ? `<button type="button" class="danger" data-pool-act="banned" data-email="${email}" data-source="${src}">标已封禁</button>` : '',
     r.status !== 'disabled' ? `<button type="button" data-pool-act="disabled" data-email="${email}" data-source="${src}">停用</button>` : '',
     r.status !== 'failed' ? `<button type="button" data-pool-act="failed" data-email="${email}" data-source="${src}">标失败</button>` : '',
   ].filter(Boolean).join('');
@@ -5188,10 +5888,10 @@ function renderOutlook() {
       <td class="col-check"><input type="checkbox" class="outlook-row-check" data-email="${email}" data-source="${src}" ${OUTLOOK_SELECTED.has(poolKey(r)) ? 'checked' : ''}></td>
       <td class="col-email" title="${email}">
         <div class="acc-v2-email">${email || '-'}</div>
-        <div class="acc-v2-sub" title="${esc(r.copy_line || '')}">${esc(short(r.copy_line, 70))}</div>
+        ${r.status === 'banned' && r.note ? `<div class="acc-v2-sub" style="color:#b91c1c;font-weight:600;" title="${esc(r.note)}">⚠️ ${esc(short(r.note, 70))}</div>` : `<div class="acc-v2-sub" title="${esc(r.copy_line || '')}">${esc(short(r.copy_line, 70))}</div>`}
       </td>
       <td class="col-source">${esc(poolLabel(r.source))}</td>
-      <td class="col-status">${pill(r.status)}</td>
+      <td class="col-status" title="${esc(r.note || '')}">${pill(r.status)}</td>
       <td class="col-token">${_outlookTokenCell(r)}</td>
       <td class="col-time" title="${esc(r.imported_at || r.created_at || '-')}">${esc(r.imported_at || r.created_at || '-')}</td>
       <td class="col-time" title="${esc(r.used_at || '-')}">${esc(r.used_at || '-')}</td>
@@ -5215,6 +5915,7 @@ function updateOutlookSelectionUi(pageRows = null) {
   [
     'btnDeleteSelectedOutlookV2',
     'btnMarkSelectedOutlookAvailableV2',
+    'btnBanSelectedOutlookV2',
     'btnDisableSelectedOutlookV2',
     'btnFailSelectedOutlookV2',
   ].forEach(id => {
@@ -5289,9 +5990,9 @@ async function onOutlookBodyClick(e) {
       OUTLOOK_SELECTED.delete(`${source}|${email}`);
       showToast('已删除');
     } else {
-      const noteMap = {failed:'手动标记失败', available:'手动恢复可用', disabled:'手动停用'};
+      const noteMap = {failed:'手动标记失败', available:'手动标记未使用', disabled:'手动停用', banned:'手动标记已封禁'};
       await api('/api/outlook/status', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, status: poolAct, source, note: noteMap[poolAct] || '手动修改状态'}) });
-      showToast(poolAct === 'failed' ? '已标失败' : poolAct === 'disabled' ? '已停用' : '已恢复可用');
+      showToast(poolAct === 'banned' ? '已标已封禁' : poolAct === 'failed' ? '已标失败' : poolAct === 'disabled' ? '已停用' : '已设为未使用');
     }
     loadOutlook(); loadSummary();
   } catch(err) { showToast('操作失败: ' + err.message); }
@@ -5327,6 +6028,32 @@ async function onOutlookBodyClick(e) {
       if (btn) btn.setAttribute('aria-expanded', 'false');
     });
   }
+  const statusWrap = $('#poolStatusV2Wrap');
+  const statusHidden = $('#poolStatusV2');
+  if (statusWrap && statusHidden) {
+    const btn = $('#poolStatusV2Btn');
+    if (btn) btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !statusWrap.classList.contains('open');
+      statusWrap.classList.toggle('open', willOpen);
+      btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+    statusWrap.querySelectorAll('.outlook-v2-select-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const val = item.dataset.value;
+        setPoolStatusV2(val);
+        statusWrap.classList.remove('open');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+        onPoolStatusChange();
+      });
+    });
+    document.addEventListener('click', (e) => {
+      if (statusWrap.contains(e.target)) return;
+      statusWrap.classList.remove('open');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    });
+  }
   const selectAllV2 = $('#outlookSelectAllV2');
   if (selectAllV2) selectAllV2.addEventListener('change', (e) => syncOutlookSelectAll(e.target.checked));
   const bodyV2 = $('#outlookBodyV2');
@@ -5336,6 +6063,7 @@ async function onOutlookBodyClick(e) {
   }
   const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
   bind('btnMarkSelectedOutlookAvailableV2', () => bulkMarkOutlookStatus('available'));
+  bind('btnBanSelectedOutlookV2', () => bulkMarkOutlookStatus('banned'));
   bind('btnDisableSelectedOutlookV2', () => bulkMarkOutlookStatus('disabled'));
   bind('btnFailSelectedOutlookV2', () => bulkMarkOutlookStatus('failed'));
   bind('btnDeleteSelectedOutlookV2', deleteSelectedOutlook);
@@ -5483,14 +6211,16 @@ async function bulkMarkOutlookStatus(status) {
     return {source, email: rest.join('|')};
   });
   if (items.length === 0) { showToast('请先选择邮箱'); return; }
-  const labelMap = {available:'未使用/可用', disabled:'停用', failed:'失败'};
+  const labelMap = {available:'未使用', banned:'已封禁', disabled:'停用', failed:'失败'};
   const label = labelMap[status] || status;
   if (!confirm(`确定把选中的 ${items.length} 个邮箱标记为${label}吗？`)) return;
   const btnId = status === 'disabled'
     ? 'btnDisableSelectedOutlookV2'
     : status === 'failed'
       ? 'btnFailSelectedOutlookV2'
-      : 'btnMarkSelectedOutlookAvailableV2';
+      : status === 'banned'
+        ? 'btnBanSelectedOutlookV2'
+        : 'btnMarkSelectedOutlookAvailableV2';
   const btn = document.getElementById(btnId);
   if (btn) btn.disabled = true;
   try {

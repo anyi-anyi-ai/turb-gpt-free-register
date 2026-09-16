@@ -2,8 +2,14 @@
 """CloakBrowser 自动化注册配置。"""
 from config.env_loader import apply_env_overrides
 
-# 是否无头启动：False=显示窗口，True=无头。
+# 是否无头启动：True=默认无头（遇到人机验证时自动尝试清障并弹窗），False=始终显示窗口。
 CLOAK_HEADLESS: bool = True
+
+# 自动清障（无头状态下静默穿透点击人机验证）最大尝试次数，默认 2 次。
+CLOAK_AUTO_CLEAR_MAX_ATTEMPTS: int = 2
+
+# 自动清障未通过时，切换有头窗口弹出后等待人工接管解决的最长秒数，默认 30 秒（可在 20~40 秒之间调整）。
+CLOAK_HUMAN_TAKEOVER_TIMEOUT: int = 30
 
 # 是否启用 CloakBrowser humanize 行为。
 CLOAK_HUMANIZE: bool = True
@@ -38,4 +44,18 @@ CLOAK_SELENIUM_TIMEOUT: int = 90
 CLOAK_KEEP_BROWSER_OPEN: bool = False
 
 # ---- .env overrides for WebUI editable fields ----
-apply_env_overrides(globals(), {'CLOAK_HEADLESS': 'bool', 'CLOAK_HUMANIZE': 'bool', 'CLOAK_GEOIP': 'bool', 'CLOAK_LOCALE': 'str', 'CLOAK_TIMEZONE': 'str', 'CLOAK_USE_PROXY': 'bool', 'CLOAK_LICENSE_KEY': 'str', 'CLOAK_FINGERPRINT_SEED': 'str', 'CLOAK_USER_DATA_DIR': 'str', 'CLOAK_SELENIUM_TIMEOUT': 'int', 'CLOAK_KEEP_BROWSER_OPEN': 'bool'})
+apply_env_overrides(globals(), {
+    'CLOAK_HEADLESS': 'bool',
+    'CLOAK_AUTO_CLEAR_MAX_ATTEMPTS': 'int',
+    'CLOAK_HUMAN_TAKEOVER_TIMEOUT': 'int',
+    'CLOAK_HUMANIZE': 'bool',
+    'CLOAK_GEOIP': 'bool',
+    'CLOAK_LOCALE': 'str',
+    'CLOAK_TIMEZONE': 'str',
+    'CLOAK_USE_PROXY': 'bool',
+    'CLOAK_LICENSE_KEY': 'str',
+    'CLOAK_FINGERPRINT_SEED': 'str',
+    'CLOAK_USER_DATA_DIR': 'str',
+    'CLOAK_SELENIUM_TIMEOUT': 'int',
+    'CLOAK_KEEP_BROWSER_OPEN': 'bool',
+})
