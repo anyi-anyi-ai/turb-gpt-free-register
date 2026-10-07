@@ -12,6 +12,10 @@
 注册成功的邮箱.json
 注册成功的邮箱.txt
 注册成功的token.txt
+注册成功的UNED账号.txt
+accounts_*.txt
+*_cookies.json
+stableaudio_cookies.json
 accounts/
 H_API.md
 
@@ -64,6 +68,12 @@ sentinel/sentinel.config.json
 # 意外生成的本地目录
 -/
 
+# 自动化测试与逆向调试截图
+debug_screenshots/
+*.png
+*.jpg
+*.jpeg
+
 # ============================================================
 # 编辑器 / 操作系统
 # ============================================================
@@ -88,3 +98,6 @@ webui.log
 webui.pid
 logs/
 run/
+
+# 参考借鉴资料
+项目借鉴和参考/
