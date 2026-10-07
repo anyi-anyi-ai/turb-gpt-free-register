@@ -22,7 +22,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = _ROOT / "turb.sqlite3"
 
 MUSE2API_URL = os.environ.get("MUSE2API_URL", "http://127.0.0.1:18610/admin/accounts")
-MUSE2API_KEY = os.environ.get("MUSE2API_KEY", "m2a_adm_e0de3f869d944ea0868921a36d03d8a9")
+MUSE2API_KEY = os.environ.get("MUSE2API_KEY", "m2a_change_me_secret_token")
 
 
 def _get_sync_conn(db_path: Path | str | None = None) -> sqlite3.Connection:

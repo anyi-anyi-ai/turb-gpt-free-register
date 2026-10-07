@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,8 +22,8 @@ logger = logging.getLogger("stableaudio.sync")
 
 _ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = _ROOT / "turb.sqlite3"
-GATEWAY_BASE_URL = "http://127.0.0.1:18620"
-GATEWAY_ADMIN_TOKEN = "music2api-admin-secret-key-change-me"
+GATEWAY_BASE_URL = os.environ.get("MUSIC2API_BASE_URL", "http://127.0.0.1:18620")
+GATEWAY_ADMIN_TOKEN = os.environ.get("MUSIC2API_ADMIN_TOKEN", "music2api-admin-secret-key-change-me")
 
 
 def _get_sync_conn(db_path: Path | str | None = None) -> sqlite3.Connection:
