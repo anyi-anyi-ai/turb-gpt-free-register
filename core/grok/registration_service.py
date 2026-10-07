@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import secrets
 import string
 import threading
 import time
@@ -33,13 +34,14 @@ logger = logging.getLogger(__name__)
 
 def generate_strong_password(length: int = 14) -> str:
     """生成符合 Grok 规范的强密码（大小写字母+数字+特殊符号）。"""
-    lower = random.choice(string.ascii_lowercase)
-    upper = random.choice(string.ascii_uppercase)
-    digit = random.choice(string.digits)
-    punct = random.choice("@#$%^&*!")
-    remaining = "".join(random.choices(string.ascii_letters + string.digits + "@#$%^&*!", k=length - 4))
+    lower = secrets.choice(string.ascii_lowercase)
+    upper = secrets.choice(string.ascii_uppercase)
+    digit = secrets.choice(string.digits)
+    punct = secrets.choice("@#$%^&*!")
+    pool = string.ascii_letters + string.digits + "@#$%^&*!"
+    remaining = "".join(secrets.choice(pool) for _ in range(max(0, length - 4)))
     pwd_list = list(lower + upper + digit + punct + remaining)
-    random.shuffle(pwd_list)
+    secrets.SystemRandom().shuffle(pwd_list)
     return "".join(pwd_list)
 
 

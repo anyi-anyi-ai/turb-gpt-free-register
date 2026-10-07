@@ -16,6 +16,7 @@ import json
 import os
 import random
 import re
+import secrets
 import string
 import sys
 import time
@@ -427,7 +428,7 @@ def generate_email_password(domain=None):
     )
     domain = domain or _preferred_outlook_domain()
     email = f"{prefix}@{domain}"
-    password = "Aa1!" + "".join(random.choices(string.ascii_letters + string.digits, k=12))
+    password = "Aa1!" + "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
     return email, password, prefix
 
 

@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import secrets
 import string
 import sys
 import time
@@ -1112,7 +1113,7 @@ async def register_replit(context, email, email_password, email_token="", tag=""
     email_prefix = email.split("@")[0]
     base = re.sub(r'[^a-zA-Z0-9]', '', email_prefix)[:12] or "user"
     username = (base + ''.join(random.choices(string.digits, k=4)))[:20]
-    replit_pwd = "Rp1!" + ''.join(random.choices(string.ascii_letters + string.digits, k=14))
+    replit_pwd = "Rp1!" + ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(14))
 
     print(f"\n  {tag} [replit] registering @{username} ({email})")
     page = await context.new_page()

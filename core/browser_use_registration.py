@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import random
+import secrets
 import threading
 import string
 import time
@@ -269,14 +270,14 @@ def _generate_password(length: int = 14) -> str:
     digits = string.digits
     symbols = "!@#$%^&*"
     chars = [
-        random.choice(upper),
-        random.choice(lower),
-        random.choice(digits),
-        random.choice(symbols),
+        secrets.choice(upper),
+        secrets.choice(lower),
+        secrets.choice(digits),
+        secrets.choice(symbols),
     ]
     pool = upper + lower + digits + symbols
-    chars.extend(random.choice(pool) for _ in range(max(0, length - len(chars))))
-    random.shuffle(chars)
+    chars.extend(secrets.choice(pool) for _ in range(max(0, length - len(chars))))
+    secrets.SystemRandom().shuffle(chars)
     return "".join(chars)
 
 
@@ -568,15 +569,25 @@ def _quick_auth_state(page) -> dict:
                 qv("input[type='password']") ||
                 qv("input[name='password']") ||
                 qv("input[autocomplete='new-password']");
+              const hasCf =
+                url.includes('__cf_chl_') ||
+                q('#challenge-stage') ||
+                q('#cf-challenge-running') ||
+                q('.cf-turnstile') ||
+                q('iframe[src*="cloudflare"]') ||
+                text.includes('セキュリティ検証') ||
+                text.includes('security verification') ||
+                text.includes('checking if the site connection is secure');
               let state = 'other';
               // /log-in/password 代表该邮箱已走登录密码分支；即便页面 DOM 里有 code/otp 字样，
               // 注册流程也按不可用邮箱处理，不能误判成邮箱验证码页。
               if (url.includes('/log-in/password')) state = 'login_password';
+              else if (hasCf && !qv("input:not([type=hidden])")) state = 'cloudflare_challenge';
               else if (hasOtp) state = 'email_verification';
               else if (hasPassword) state = 'password';
               else if (url.includes('about-you') || url.includes('profile') || url.includes('create-account/about')) state = 'profile';
               else if (url.includes('chatgpt.com') && !url.includes('/auth/')) state = 'chatgpt';
-              return {state, url, hasOtp, hasPassword, textPreview: text.slice(0, 160)};
+              return {state, url, hasOtp, hasPassword, hasCf, textPreview: text.slice(0, 160)};
             }"""
         ) or {"state": "other", "url": _page_url(page)}
     except Exception as exc:
@@ -811,6 +822,14 @@ def _submit_email_step_pw(page, email: str) -> bool:
         return False
 
 
+class PageStageAdvancedPw(RuntimeError):
+    """BrowserUse: 页面在找邮箱/填邮箱阶段已异步跳转到后续阶段。"""
+    def __init__(self, stage: str, details: dict | None = None):
+        super().__init__(f"页面已进入后续认证阶段: {stage}")
+        self.stage = stage
+        self.details = details or {}
+
+
 def _wait_for_email_input_pw(page, timeout_ms: int | None = None):
     """进入邮箱登录/注册方式并返回已找到的可见邮箱输入框。"""
     fill_timeout_ms = timeout_ms if timeout_ms is not None else min(_timeout_ms(), 24000)
@@ -822,6 +841,13 @@ def _wait_for_email_input_pw(page, timeout_ms: int | None = None):
         loc = _find_email_input_locator_pw(page, timeout_ms=1000)
         if loc is not None:
             return loc
+
+        # 双向守卫：若页面已跳转到验证码/密码/资料/登录态，绝不在验证码页死找邮箱框
+        info = _quick_auth_state(page)
+        auth_state = str(info.get("state") or "other")
+        if auth_state in ("email_verification", "password", "login_password", "chatgpt", "profile"):
+            logger.info("[BrowserUse] 寻找邮箱输入框时检测到页面已进入后续阶段：%s，中断找邮箱", auth_state)
+            raise PageStageAdvancedPw(auth_state, details={"url": _page_url(page)})
 
         last_state = _email_entry_state_pw(page)
         if not clicked_email_option:
@@ -855,6 +881,13 @@ def _wait_for_email_input_pw(page, timeout_ms: int | None = None):
                 continue
 
         time.sleep(0.35 if _fast_mode() else 0.55)
+
+    # 超时前最后一次诊断
+    info = _quick_auth_state(page)
+    auth_state = str(info.get("state") or "other")
+    if auth_state in ("email_verification", "password", "login_password", "chatgpt", "profile"):
+        logger.info("[BrowserUse] 找邮箱超时前检测到页面实际处于：%s，流转下一步", auth_state)
+        raise PageStageAdvancedPw(auth_state, details={"url": _page_url(page)})
 
     raise RuntimeError(f"找不到邮箱输入框/邮箱入口，页面={_page_url(page) or '-'} state={last_state}")
 
@@ -925,28 +958,44 @@ def _submit_email_until_transition(
     current_email = str(email or "").strip()
     for attempt in range(1, max(1, attempts) + 1):
         _check_manual_stop()
+        # 前置双向检查：当前是否已经跨越到后续步骤（如验证码页/密码页）
+        pre_state = _quick_auth_state(page).get("state") or "other"
+        if pre_state in ("email_verification", "password", "chatgpt", "profile"):
+            logger.info("[BrowserUse] 准备填写邮箱（%s/%s）前检测到页面已在后续阶段：%s，直接流转", attempt, attempts, pre_state)
+            return pre_state
+        if pre_state == "login_password":
+            raise RuntimeError(f"邮箱提交后进入登录密码页，按已注册/不可用邮箱处理并停用: url={_page_url(page) or 'https://auth.openai.com/log-in/password'}")
+
         logger.info("[BrowserUse] 提交邮箱尝试 %s/%s：%s", attempt, attempts, current_email or "页面找到输入框后分配")
-        if current_email:
-            _type_email(page, current_email, timeout_ms=timeout_ms)
-        else:
-            # 先确认页面已有可用输入框，再领取邮箱；不能把领取动作放在页面导航之前。
-            email_input = _wait_for_email_input_pw(page, timeout_ms=timeout_ms)
-            if email_supplier is None:
-                raise RuntimeError("已找到邮箱输入框，但未提供邮箱分配器")
-            current_email = str(email_supplier() or "").strip()
-            if not current_email:
-                raise RuntimeError("邮箱分配器返回了空邮箱地址")
-            _human_fill_locator(
-                page,
-                email_input,
-                current_email,
-                timeout=6000,
-                typing_delay_range=_cloud_typing_delay("email"),
-                per_char=True,
-            )
-            _human_pause(0.3, 0.8)
-            if not _submit_email_step_pw(page, current_email):
-                raise RuntimeError(f"邮箱已输入但提交失败，页面={_page_url(page) or '-'} state={_email_entry_state_pw(page)}")
+        try:
+            if current_email:
+                _type_email(page, current_email, timeout_ms=timeout_ms)
+            else:
+                # 先确认页面已有可用输入框，再领取邮箱；不能把领取动作放在页面导航之前。
+                email_input = _wait_for_email_input_pw(page, timeout_ms=timeout_ms)
+                if email_supplier is None:
+                    raise RuntimeError("已找到邮箱输入框，但未提供邮箱分配器")
+                current_email = str(email_supplier() or "").strip()
+                if not current_email:
+                    raise RuntimeError("邮箱分配器返回了空邮箱地址")
+                _human_fill_locator(
+                    page,
+                    email_input,
+                    current_email,
+                    timeout=6000,
+                    typing_delay_range=_cloud_typing_delay("email"),
+                    per_char=True,
+                )
+                _human_pause(0.3, 0.8)
+                if not _submit_email_step_pw(page, current_email):
+                    raise RuntimeError(f"邮箱已输入但提交失败，页面={_page_url(page) or '-'} state={_email_entry_state_pw(page)}")
+        except PageStageAdvancedPw as pae:
+            if pae.stage == "login_password":
+                raise RuntimeError(f"邮箱提交后进入登录密码页，按已注册/不可用邮箱处理并停用: url={_page_url(page) or 'https://auth.openai.com/log-in/password'}")
+            if pae.stage in ("email_verification", "password", "chatgpt", "profile"):
+                logger.info("[BrowserUse] 寻找/填写邮箱过程中检测到页面已进入：%s，直接流转下一步", pae.stage)
+                return pae.stage
+            raise
         _check_manual_stop()
         last_state = _wait_after_email_submit_transition(page, context=context, timeout=10 if _fast_mode() else 16)
         logger.info("[BrowserUse] 邮箱提交后状态：%s url=%s", last_state, _page_url(page) or "-")
@@ -2902,6 +2951,9 @@ def run_browser_use_registration(
                 if dead_code:
                     logger.warning("[BrowserUse][封禁剔除] 邮箱 %s 检测到已被 OpenAI 停用/封禁 (%s)，标记为已封禁并放弃注册", email, dead_code)
                     release_email(email, status="banned", note=f"GPT已封禁: {dead_code}")
+                elif "user_already_exists" in str(exc).lower() or type(exc).__name__ in ('AlreadyRegisteredError', 'UserAlreadyExistsError') or "AlreadyRegisteredError" in str(exc):
+                    logger.warning("[BrowserUse] 邮箱 %s 检测到已在 GPT 注册过 (user_already_exists)，标记为停用并隔离", email)
+                    release_email(email, status="disabled", note="已注册过GPT: user_already_exists")
                 else:
                     release_email(
                         email,
