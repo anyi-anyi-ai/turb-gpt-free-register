@@ -83,6 +83,16 @@ def generate_mailcom_password(length: int = 12) -> str:
     return "".join(chars)
 
 
+def _mask_pwd(pwd: str | None) -> str:
+    """脱敏密码，避免在日志中打印明文凭据。"""
+    if not pwd:
+        return "***"
+    s = str(pwd)
+    if len(s) <= 4:
+        return "***"
+    return f"{s[:2]}***{s[-2:]}"
+
+
 # ============================================================
 # HTML 解析辅助
 # ============================================================
@@ -296,13 +306,13 @@ def change_account_password(
     generated = not bool((new_password or "").strip())
     new_password = (new_password or "").strip() or generate_mailcom_password(12)
     old_password = account.password
-    # 发送变更前：明确打出旧密码与即将提交的随机/指定新密码（测活批量改密入口）
+    # 发送变更前：打出脱敏密码与即将提交的随机/指定新密码（测活批量改密入口）
     logger.info(
         "[MailCom][测活/批量改密] 变更前 email=%s old_password=%s "
         "new_password=%s generated=%s (即将发送 passwordChange)",
         account.username,
-        old_password,
-        new_password,
+        _mask_pwd(old_password),
+        _mask_pwd(new_password),
         generated,
     )
     proxy = proxy or _mailcom_proxy()
@@ -319,8 +329,8 @@ def change_account_password(
             "[MailCom][测活/批量改密] 变更失败 email=%s old_password=%s "
             "attempted_new_password=%s err=%s",
             account.username,
-            old_password,
-            new_password,
+            _mask_pwd(old_password),
+            _mask_pwd(new_password),
             exc,
         )
         raise
@@ -328,8 +338,8 @@ def change_account_password(
         "[MailCom][测活/批量改密] 变更后 email=%s old_password=%s "
         "new_password=%s status=success",
         account.username,
-        old_password,
-        new_password,
+        _mask_pwd(old_password),
+        _mask_pwd(new_password),
     )
     return account, new_password
 
@@ -369,13 +379,13 @@ def change_mailcom_password_for_email(
     if not current_password:
         raise MailComError(f"{email} 的当前密码为空，无法改密")
 
-    # 发送变更前：先打出变更前密码与即将提交的随机/指定新密码（自动化注册前改密入口）
+    # 发送变更前：打出脱敏前密码与即将提交的随机/指定新密码（自动化注册前改密入口）
     logger.info(
         "[MailCom][自动化改密] 变更前 email=%s old_password=%s "
         "new_password=%s generated=%s (即将发送 passwordChange)",
         email,
-        current_password,
-        new_password,
+        _mask_pwd(current_password),
+        _mask_pwd(new_password),
         generated,
     )
 
@@ -394,8 +404,8 @@ def change_mailcom_password_for_email(
             "[MailCom][自动化改密] 变更失败 email=%s old_password=%s "
             "attempted_new_password=%s err=%s",
             email,
-            current_password,
-            new_password,
+            _mask_pwd(current_password),
+            _mask_pwd(new_password),
             exc,
         )
         raise
@@ -403,8 +413,8 @@ def change_mailcom_password_for_email(
         "[MailCom][自动化改密] 变更后 email=%s old_password=%s "
         "new_password=%s status=success",
         email,
-        current_password,
-        new_password,
+        _mask_pwd(current_password),
+        _mask_pwd(new_password),
     )
 
     # 回写内存缓存，后续 fetch_latest_otp 会用新密码
@@ -420,7 +430,7 @@ def change_mailcom_password_for_email(
         logger.info(
             "[MailCom][自动化改密] %s 新密码已回写 DB email_pool.password new_password=%s",
             email,
-            new_password,
+            _mask_pwd(new_password),
         )
     except Exception as exc:
         logger.warning(

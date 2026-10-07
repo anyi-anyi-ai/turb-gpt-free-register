@@ -19,7 +19,7 @@ from email.header import decode_header
 from pathlib import Path
 
 from config import email as _email_cfg
-from core.otp_utils import looks_like_openai_email, extract_otp
+from core.otp_utils import looks_like_openai_email, extract_otp, mask_otp
 
 logger = logging.getLogger(__name__)
 
@@ -336,12 +336,12 @@ def fetch_latest_otp(
             if ts > best_ts:
                 if best_otp:
                     logger.info(
-                        f"[QQMail] 发现更晚的 OTP={otp} (ts={raw_ts}), "
-                        f"替换之前的 {best_otp}, 重置 settle 计时"
+                        f"[QQMail] 发现更晚的 OTP={mask_otp(otp)} (ts={raw_ts}), "
+                        f"替换之前的 {mask_otp(best_otp)}, 重置 settle 计时"
                     )
                 else:
                     logger.info(
-                        f"[QQMail] 首次锁定 OTP={otp}, ts={raw_ts}, "
+                        f"[QQMail] 首次锁定 OTP={mask_otp(otp)}, ts={raw_ts}, "
                         f"subject={subject!r}, 等 {settle}s 看是否有更晚邮件..."
                     )
                 best_otp = otp
@@ -354,14 +354,14 @@ def fetch_latest_otp(
         now = time.time()
         if best_otp and settle_until is not None and now >= settle_until:
             logger.info(
-                f"[QQMail] settle 完成，返回 OTP={best_otp}, subject={best_subject!r}"
+                f"[QQMail] settle 完成，返回 OTP={mask_otp(best_otp)}, subject={best_subject!r}"
             )
             return best_otp
 
         remaining = int(deadline - now)
         if best_otp:
             logger.info(
-                f"[QQMail] 已锁定候选 OTP={best_otp}，等 settle 中"
+                f"[QQMail] 已锁定候选 OTP={mask_otp(best_otp)}，等 settle 中"
                 f"（剩余 settle ~{int(settle_until - now)}s, 总剩余 {remaining}s）..."
             )
         else:
@@ -373,7 +373,7 @@ def fetch_latest_otp(
     # 超时但有候选
     if best_otp:
         logger.warning(
-            f"[QQMail] 总超时但已有候选，返回 OTP={best_otp} (subject={best_subject!r})"
+            f"[QQMail] 总超时但已有候选，返回 OTP={mask_otp(best_otp)} (subject={best_subject!r})"
         )
         return best_otp
 
