@@ -268,20 +268,26 @@ def _parse_accounts_file(path: Path) -> list[OutlookAccount]:
 # 公共接口：挑账号 / 取 OTP（统一走 DB）
 # ============================================================
 
-def pick_account() -> OutlookAccount:
+def pick_account(service: str = "chatgpt") -> OutlookAccount:
     """
-    原子地挑一个 status='available' 的 Outlook 账号并标记为 'used'（DB 事务）。
+    原子地挑一个 Outlook 账号并标记为已领取（DB 事务）。
     多线程并发安全。
     """
     from core.db import claim_next_outlook, outlook_pool_summary
 
-    row = claim_next_outlook()
+    row = claim_next_outlook(for_service=service)
     if row is None:
-        summary = outlook_pool_summary()
-        raise OutlookClientError(
-            f"Outlook 账号池没有可用账号: {summary}. "
-            "请在 WebUI 的邮箱库中导入新邮箱。"
-        )
+        summary = outlook_pool_summary(for_service=service)
+        if service == "grok":
+            raise OutlookClientError(
+                f"Outlook 账号池中已无未注册 Grok 的可用账号: {summary}. "
+                "请在 WebUI 的邮箱库中导入新邮箱或使用其他邮箱来源。"
+            )
+        else:
+            raise OutlookClientError(
+                f"Outlook 账号池没有可用账号: {summary}. "
+                "请在 WebUI 的邮箱库中导入新邮箱。"
+            )
 
     account = OutlookAccount(
         email=row["email"],
@@ -290,7 +296,7 @@ def pick_account() -> OutlookAccount:
         refresh_token=row["refresh_token"],
     )
     _CONTEXT_CACHE[_cache_key(account.email)] = account
-    logger.info(f"[Outlook] 选中账号: {account.email}（DB id={row['id']}）")
+    logger.info(f"[Outlook] 选中账号 (服务={service}): {account.email}（DB id={row['id']}）")
     return account
 
 
@@ -306,6 +312,23 @@ def get_account_context(email: str) -> OutlookAccount | None:
         return None
     if cache_key in _CONTEXT_CACHE:
         return _CONTEXT_CACHE[cache_key]
+
+    if email and email.lower().endswith("@alumno.uned.es"):
+        ident = email.split("@")[0].strip().lower()
+        try:
+            from core.db.base import _sqlite_conn, _LOCK
+            with _LOCK, _sqlite_conn() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT email FROM uned_accounts WHERE LOWER(uned_identifier) = ?", (ident,))
+                r = cur.fetchone()
+            if r and r[0]:
+                forward_acc = get_account_context(r[0])
+                if forward_acc:
+                    _CONTEXT_CACHE[cache_key] = forward_acc
+                    return forward_acc
+        except Exception as e:
+            logger.warning(f"[OutlookContext] 查找 UNED 关联 Outlook 失败 ({email}): {e}")
+
     from core.db import get_account_by_email, get_outlook_by_email
 
     pool_row = get_outlook_by_email(email)
@@ -743,44 +766,44 @@ def _fetch_outlook_rest_messages(http: CurlSession, token: str) -> list[dict]:
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
     }
-    url = "https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages"
+    folder_paths = ["inbox", "junkemail"]
     attempts = [
         {
-            "$top": "20",
+            "$top": "15",
             "$orderby": "ReceivedDateTime desc",
             "$select": "Id,Subject,From,ReceivedDateTime,BodyPreview,Body",
         },
         {
-            "$top": "20",
+            "$top": "15",
             "$orderby": "DateTimeReceived desc",
             "$select": "Id,Subject,From,DateTimeReceived,BodyPreview,Body",
         },
-        {"$top": "20"},
+        {"$top": "15"},
     ]
-    last_text = ""
-    data = None
-    for params in attempts:
-        resp = http.get(url, headers=headers, params=params)
-        text = resp.text or ""
-        last_text = text[:500]
-        if resp.status_code == 200:
-            data = resp.json()
-            break
-        # 字段名不兼容时自动降级下一套参数。
-        if resp.status_code == 400 and ("Could not find a property" in text or "ParseUri" in text):
-            logger.debug("[Outlook] Outlook REST 参数不兼容，降级重试: %s", text[:220])
-            continue
-        raise OutlookClientError(f"Outlook REST messages HTTP {resp.status_code}: {text[:500]}")
-    if data is None:
-        raise OutlookClientError(f"Outlook REST messages 失败: {last_text}")
-    rows = data.get("value") if isinstance(data, dict) else None
-    if not isinstance(rows, list):
-        raise OutlookClientError(f"Outlook REST 响应缺少 value: {str(data)[:300]}")
+    all_rows = []
+    for folder in folder_paths:
+        url = f"https://outlook.office.com/api/v2.0/me/mailfolders/{folder}/messages"
+        for params in attempts:
+            try:
+                resp = http.get(url, headers=headers, params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    rows = data.get("value") if isinstance(data, dict) else []
+                    if isinstance(rows, list):
+                        all_rows.extend(rows)
+                    break
+            except Exception:
+                pass
+
     out = []
-    for m in rows:
+    seen_ids = set()
+    for m in all_rows:
         if not isinstance(m, dict):
             continue
-        # Outlook REST 字段转 Graph 风格；不同版本字段大小写不同。
+        mid = m.get("Id") or m.get("id") or ""
+        if mid in seen_ids:
+            continue
+        seen_ids.add(mid)
         from_obj = m.get("From") or m.get("from") if isinstance(m.get("From") or m.get("from"), dict) else {}
         email_addr = from_obj.get("EmailAddress") or from_obj.get("emailAddress") if isinstance(from_obj, dict) else {}
         if not isinstance(email_addr, dict):
@@ -789,7 +812,7 @@ def _fetch_outlook_rest_messages(http: CurlSession, token: str) -> list[dict]:
         received = m.get("ReceivedDateTime") or m.get("DateTimeReceived") or m.get("receivedDateTime") or ""
         out.append({
             "_fetch_source": "outlook_rest",
-            "id": m.get("Id") or m.get("id") or "",
+            "id": mid,
             "subject": m.get("Subject") or m.get("subject") or "",
             "from": {"emailAddress": {"address": email_addr.get("Address") or email_addr.get("address") or "", "name": email_addr.get("Name") or email_addr.get("name") or ""}},
             "fromEmail": email_addr.get("Address") or email_addr.get("address") or "",
@@ -801,7 +824,7 @@ def _fetch_outlook_rest_messages(http: CurlSession, token: str) -> list[dict]:
             "body": body_obj.get("Content") or body_obj.get("content") or "",
             "html": body_obj.get("Content") or body_obj.get("content") or "",
         })
-    logger.debug(f"[Outlook] Outlook REST 直连拿到 {len(out)} 封邮件")
+    logger.debug(f"[Outlook] Outlook REST 直连 (含垃圾箱) 拿到 {len(out)} 封邮件")
     return out
 
 
@@ -1191,3 +1214,59 @@ def _is_after(item: dict, after_ts: float) -> bool:
         # 时间字段缺失/解析不出 → 放过（不要因解析失败就丢邮件）
         return True
     return ts >= after_ts - _OTP_CLOCK_SKEW_TOLERANCE
+
+
+def fetch_latest_password_reset_link(
+    email: str,
+    after_ts: float | None = None,
+    max_wait: int = 60,
+    poll_interval: int = 3,
+) -> str:
+    """从收件箱轮询抓取 OpenAI 密码重置邮件，并提取重置安全链接。"""
+    import re
+    from core.otp_utils import _get_field
+    account = get_account_context(email)
+    if account is None:
+        raise OutlookClientError(f"未找到 {email} 的账号上下文，无法抓取密码重置链接")
+
+    deadline = time.time() + max_wait
+    session = _http_session()
+
+    logger.info(f"[Outlook] 开始轮询 {email} 的密码重置邮件，最长等待 {max_wait}s...")
+
+    while time.time() < deadline:
+        all_candidates = []
+        for protocol in ("graph", "imap"):
+            emails = _fetch_via(session, protocol, account)
+            for item in emails:
+                ts = _parse_email_ts(item) or 0.0
+                all_candidates.append((protocol, item, ts))
+            if emails and protocol == "graph":
+                break
+
+        all_candidates.sort(key=lambda x: x[2], reverse=True)
+
+        for protocol, item, ts in all_candidates:
+            if not looks_like_openai_email(item):
+                continue
+            if after_ts is not None and not _is_after(item, after_ts):
+                continue
+
+            subject = str(item.get("subject") or "").lower()
+            body_txt = str(_get_field(item, "text", "bodyPreview", "bodyText") or "")
+            body_html = str(_get_field(item, "content", "body", "html", "body.content", "bodyHtml") or "")
+            full_text = f"{subject}\n{body_txt}\n{body_html}"
+
+            # 匹配密码重置安全链接
+            match = re.search(r'https://auth\.openai\.com/u/(?:mfa-reset|reset-password|password-reset)[^\s"\'<>]+', full_text)
+            if not match:
+                match = re.search(r'https://auth\.openai\.com/[^\s"\'<>]*(?:ticket=|reset)[^\s"\'<>]*', full_text)
+
+            if match:
+                reset_url = match.group(0).replace("&amp;", "&")
+                logger.info(f"[Outlook] 成功提取到 OpenAI 密码重置链接: {reset_url}")
+                return reset_url
+
+        time.sleep(poll_interval)
+
+    raise OutlookClientError(f"等待 {email} 的密码重置邮件超时（>{max_wait}s）")
