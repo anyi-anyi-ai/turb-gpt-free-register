@@ -109,6 +109,16 @@ def register_auth_routes(app: Any) -> None:
             return None
         if request.path in ("/favicon.ico",):
             return Response(status=204)
+        if request.path == "/api/accounts/heal-by-email":
+            heal_token = (os.getenv("HEAL_TOKEN") or "").strip()
+            provided_heal = (request.headers.get("X-Heal-Token") or "").strip()
+            if heal_token and provided_heal and hmac.compare_digest(provided_heal, heal_token):
+                return None
+            if request_is_authorized():
+                return None
+            return jsonify({"ok": False, "error": "未授权的自愈请求 (需要有效的 X-Heal-Token 或 WebUI 会话)"}), 401
+        if request.path.startswith("/api/assets/"):
+            return None
         if request_is_authorized():
             return None
         return _unauthorized_response()
