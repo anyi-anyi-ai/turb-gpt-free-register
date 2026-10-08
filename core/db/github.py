@@ -56,5 +56,6 @@ __all__ = [
     "save_github_account",
     "get_github_account",
     "list_github_accounts",
-    "load_available_github_materials",
+    "load_pending_accounts",
 ]
+
