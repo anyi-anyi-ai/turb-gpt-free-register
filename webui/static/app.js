@@ -153,6 +153,9 @@ async function pollStatus(){
     }
     renderUpdateState(s.update || {}, s.version || '');
     $('#node').textContent = '出口 ' + (s.node || '--');
+    const elKpiNode = $('#kpi-proxy-node');
+    if(elKpiNode) elKpiNode.textContent = s.node || '127.0.0.1:7890';
+
     const online = [s.bitbrowser, networkOnline, s.k12, s.chatgpt_plus].filter(Boolean).length;
     $('#health-dot').classList.remove('pending', 'on', 'partial');
     if(online === 4) $('#health-dot').classList.add('on');
