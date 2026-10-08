@@ -212,6 +212,15 @@ def _ensure_proxy_env():
 
 app = FastAPI(title="reg-factory WebUI")
 
+# 挂载模块化路由域 (Universal Vault, Dashboard, Network, Mailpool, Maintenance)
+from webui.routers import vault, dashboard, network, mailpool, maintenance
+app.include_router(vault.router)
+app.include_router(dashboard.router)
+app.include_router(network.router)
+app.include_router(mailpool.router)
+app.include_router(maintenance.router)
+
+
 # 运行中的任务：run_id -> {proc, lines:[], done:bool, script, cmd, started}
 RUNS = {}
 _run_seq = [0]
