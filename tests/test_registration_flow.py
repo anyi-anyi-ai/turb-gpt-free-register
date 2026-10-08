@@ -97,3 +97,50 @@ def test_pick_unregistered_email_for_platform(tmp_path: Path):
     specific = pick_unregistered_email_for_platform("dummy_accounts", specific_email="any@test.com", db_path=db_file)
     assert specific["email"] == "any@test.com"
     assert specific["source"] == "manual"
+
+
+def test_suno_flow_meta_and_compatibility(tmp_path: Path):
+    from core.suno_register_service import SunoRegistrationFlow, pick_available_suno_account
+
+    flow = SunoRegistrationFlow()
+    assert flow.platform_name == "suno"
+    assert flow.platform_table == "suno_accounts"
+
+    db_file = tmp_path / "test_suno.sqlite3"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE email_pool (id INTEGER PRIMARY KEY, email TEXT, payload TEXT);")
+        conn.execute("CREATE TABLE suno_accounts (id INTEGER PRIMARY KEY, email TEXT);")
+        conn.execute("INSERT INTO email_pool (email, payload) VALUES ('suno_candidate@test.com', '{\"password\": \"TestPass123!\"}');")
+        conn.commit()
+
+    picked = pick_available_suno_account(db_path=db_file)
+    assert picked["email"] == "suno_candidate@test.com"
+    assert picked["password"] == "TestPass123!"
+    assert "full_name" in picked
+
+
+def test_elevenlabs_flow_meta_and_password(tmp_path: Path):
+    from core.elevenlabs_register_service import (
+        ElevenLabsRegistrationFlow,
+        pick_available_elevenlabs_account,
+        _generate_secure_password,
+    )
+
+    flow = ElevenLabsRegistrationFlow()
+    assert flow.platform_name == "elevenlabs"
+    assert flow.platform_table == "elevenlabs_accounts"
+
+    pwd = _generate_secure_password()
+    assert len(pwd) >= 16
+    assert pwd.startswith("Eleven")
+    assert pwd.endswith("#2026!")
+
+    db_file = tmp_path / "test_eleven.sqlite3"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE email_pool (id INTEGER PRIMARY KEY, email TEXT, payload TEXT);")
+        conn.execute("INSERT INTO email_pool (email, payload) VALUES ('el_candidate@test.com', '{\"pwd\": \"abc\"}');")
+        conn.commit()
+
+    picked = pick_available_elevenlabs_account(db_path=db_file)
+    assert picked["email"] == "el_candidate@test.com"
+
