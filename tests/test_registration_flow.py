@@ -144,3 +144,108 @@ def test_elevenlabs_flow_meta_and_password(tmp_path: Path):
     picked = pick_available_elevenlabs_account(db_path=db_file)
     assert picked["email"] == "el_candidate@test.com"
 
+
+def test_stableaudio_flow_meta_and_password(tmp_path: Path):
+    from core.stableaudio_register_service import (
+        StableAudioRegistrationFlow,
+        pick_available_stableaudio_account,
+        _generate_secure_password,
+    )
+
+    flow = StableAudioRegistrationFlow()
+    assert flow.platform_name == "stableaudio"
+    assert flow.platform_table == "stableaudio_accounts"
+
+    pwd = _generate_secure_password(length=18)
+    assert len(pwd) == 18
+    assert any(c.isupper() for c in pwd)
+    assert any(c.islower() for c in pwd)
+    assert any(c.isdigit() for c in pwd)
+    assert any(c in "!@#$%&*" for c in pwd)
+
+    db_file = tmp_path / "test_sa.sqlite3"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE email_pool (id INTEGER PRIMARY KEY, email TEXT, payload TEXT);")
+        conn.execute("INSERT INTO email_pool (email, payload) VALUES ('sa_candidate@test.com', '{\"pwd\": \"123\"}');")
+        conn.commit()
+
+    picked = pick_available_stableaudio_account(db_path=db_file)
+    assert picked["email"] == "sa_candidate@test.com"
+
+
+def test_muse_flow_meta_and_birthday(tmp_path: Path):
+    from core.muse_register_service import (
+        MuseRegistrationFlow,
+        pick_available_student_account,
+        _parse_birthday,
+    )
+
+    flow = MuseRegistrationFlow()
+    assert flow.platform_name == "muse"
+    assert flow.platform_table == "muse_accounts"
+
+    # 生日解析
+    assert _parse_birthday("1999-05-20") == (20, 5, 1999)
+    assert _parse_birthday("20/05/1999") == (20, 5, 1999)
+    assert _parse_birthday("") == (15, 6, 1998)
+
+    db_file = tmp_path / "test_muse.sqlite3"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("""
+            CREATE TABLE uned_accounts (
+                id INTEGER PRIMARY KEY,
+                email TEXT,
+                uned_identifier TEXT,
+                full_name TEXT,
+                birth_date TEXT,
+                payload_json TEXT,
+                status TEXT
+            );
+        """)
+        conn.execute("""
+            INSERT INTO uned_accounts (email, uned_identifier, full_name, birth_date, payload_json, status)
+            VALUES ('fwd@outlook.com', 'std123', 'John Doe', '1998-01-01', '{}', 'activated');
+        """)
+        conn.commit()
+
+    student = pick_available_student_account(db_path=db_file)
+    assert student["student_email"] == "std123@alumno.uned.es"
+    assert student["forward_outlook"] == "fwd@outlook.com"
+    assert student["full_name"] == "John Doe"
+
+
+def test_runninghub_flow_meta_and_helpers():
+    from core.runninghub_register_service import (
+        RunningHubRegistrationFlow,
+        RunningHubRegistrar,
+        RegistrationResult,
+        generate_strong_password,
+        format_playwright_proxy,
+    )
+
+    flow = RunningHubRegistrationFlow()
+    assert flow.platform_name == "runninghub"
+    assert flow.platform_table == "runninghub_accounts"
+
+    pwd = generate_strong_password(length=14)
+    assert len(pwd) == 14
+    assert pwd.isalnum()
+
+    # 代理格式转换
+    proxy_dict = format_playwright_proxy("http://user:pass@127.0.0.1:8080")
+    assert proxy_dict["server"] == "http://127.0.0.1:8080"
+    assert proxy_dict["username"] == "user"
+    assert proxy_dict["password"] == "pass"
+    assert format_playwright_proxy(None) is None
+
+    # 向后兼容数据类
+    raw_res = RegistrationResult(
+        success=True,
+        email="test@rh.ai",
+        token="tok_rh",
+        total_coin=1000,
+    )
+    assert raw_res.success is True
+    assert raw_res.total_coin == 1000
+
+
