@@ -88,3 +88,24 @@ def test_build_cmd_grok_http():
     assert "--count 5" in cmd_str
     assert "--sub2api" in cmd_str
     assert "--sub2api-group default_grok" in cmd_str
+
+
+def test_api_scripts_endpoint():
+    from fastapi.testclient import TestClient
+    from webui.server import app
+
+    client = TestClient(app)
+    response = client.get("/api/scripts")
+    assert response.status_code == 200
+    data = response.json()
+    assert "scripts" in data
+    script_ids = [s["id"] for s in data["scripts"]]
+    assert "run_suno_register" in script_ids
+    assert "run_elevenlabs_register" in script_ids
+    assert "run_udio_register" in script_ids
+    assert "run_stableaudio_register" in script_ids
+    assert "run_muse_register" in script_ids
+    assert "run_runninghub_register" in script_ids
+    assert "register_grok_http" in script_ids
+    assert "run_proxy_harvester" in script_ids
+
