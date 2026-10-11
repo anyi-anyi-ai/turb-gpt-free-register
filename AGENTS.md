@@ -33,9 +33,14 @@
 | :--- | :--- | :--- |
 | **自省平台能力** | `python turb.py list` 或 `python turb.py list --json` | 毫秒级获取所有已装载插件 |
 | **注册单/多账号** | `python turb.py run <platform_id> --count <N>` | 自动从邮箱池分配并注册 N 个账号 |
+| **Agent 流式调用** | `python turb.py run <platform_id> --stream` | 逐行输出 NDJSON 机器可读事件与自愈动作建议 (供 AI Agent 实时监听) |
+| **指定国家出口** | `python turb.py run <platform_id> --country US` | 指定或覆盖注册出口地区，并自动绑定至身份档案 |
 | **指定邮箱注册** | `python turb.py run <platform_id> --email "user@outlook.com"` | 为特定邮箱完成目标网站确权 |
 | **人工拼图协助** | `python turb.py run elevenlabs` | 该平台声明 `requires_human: true`，中枢会自动在默认浏览器打开 Web 投屏视窗 (`http://127.0.0.1:8799/live`) 供用户完成拼图/滑块 |
 | **查看已注册资产** | `python turb.py accounts <platform_id>` | 查看已持久化的 Token、API Key 及网关同步状态 |
+| **统一身份档案库** | `python turb.py vault list [--json]` | 查看固化了出口国家与硬件指纹环境的资产档案 |
+| **环境一致性还原** | `python turb.py vault restore <vault_id>` | 还原该账号同国家 IP 出口 + 同硬件指纹 + 完整 Cookie 上下文 (防二次风控) |
+| **Python SDK 调用** | `from core.sdk import TurbEngine` | 原生异步 Python SDK 接口，支持代码级无缝调度与事件监听 |
 | **环境门禁自检** | `python turb.py preflight` | 检查 SQLite 存储、邮箱池余量及驱动环境 |
 
 ### 支持的常用平台 ID（实时动态更新，可查 list）：

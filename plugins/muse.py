@@ -30,6 +30,8 @@ class MusePlugin(BaseSitePlugin):
     target_url = "https://muse.ai"
     table_name = "muse_accounts"
     browser_type = "cloak"
+    tier = "pure_protocol"
+    target_country = "US"
     requires_human = False
     default_headless = True
 

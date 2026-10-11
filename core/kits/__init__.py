@@ -44,6 +44,21 @@ class KitBundle:
             sms=SmsKit(),
         )
 
+    @classmethod
+    def create_dual_session(
+        cls,
+        target_country: str = "US",
+        proxy: Optional[str] = None,
+        browser_type: str = "camoufox",
+    ) -> Any:
+        """快速构建轻重双模统一会话 (DualSession)。"""
+        from core.flows.dual_session import DualSession
+        return DualSession(
+            target_country=target_country,
+            proxy=proxy,
+            browser_type=browser_type,
+        )
+
 
 __all__ = [
     "EmailKit",

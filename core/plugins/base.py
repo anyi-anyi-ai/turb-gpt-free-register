@@ -14,8 +14,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from core.agent_bridge import stream_broadcaster
 from core.flows.context import FlowContext, RegistrationResult
 from core.kits import KitBundle
+from core.vault.identity_vault import IdentitySnapshot, get_identity_vault
 
 logger = logging.getLogger("turb.plugin.base")
 
@@ -38,7 +40,9 @@ class BaseSitePlugin(ABC):
     description: str = ""
     target_url: str = ""
     table_name: str = ""
-    browser_type: str = "cloak"  # "cloak" | "patchright"
+    browser_type: str = "cloak"  # "cloak" | "patchright" | "camoufox" | "protocol"
+    tier: str = "heavy_browser"  # "heavy_browser" | "hybrid" | "pure_protocol"
+    target_country: str = "US"   # 推荐出口地区，与身份档案严格一致性绑定
     requires_human: bool = False  # 是否包含图形拼图等需要人机极速协同的步骤
     default_headless: bool = True
 
@@ -194,6 +198,41 @@ class BaseSitePlugin(ABC):
             if result.ok:
                 logger.info(f"[{self.id}] 注册执行成功: {email}")
                 self.persist(ctx, result, self.kits)
+
+                # 自动构建并固化身份档案快照 (Identity Vault)，保证后续使用时的国家与硬件指纹一致性
+                try:
+                    vault = get_identity_vault()
+                    clean_id = (email.split("@")[0] if "@" in email else email) or "user"
+                    v_id = f"vault_{self.id}_{clean_id}_{int(time.time())}"
+                    snapshot = IdentitySnapshot(
+                        vault_id=v_id,
+                        platform=self.id,
+                        account_id=email,
+                        target_country=getattr(self, "target_country", "US"),
+                        driver_type=self.browser_type,
+                        fingerprint_seed=int(time.time()),
+                        password=ctx.password,
+                        last_exit_ip=effective_proxy or "",
+                        fingerprint_profile={"user_agent": "Mozilla/5.0"},
+                        cookies=result.cookies,
+                        tokens={
+                            "access_token": result.access_token,
+                            "refresh_token": result.refresh_token,
+                        },
+                        metadata=result.metadata,
+                    )
+                    vault.save_identity(snapshot)
+                    result.metadata["vault_id"] = v_id
+                    stream_broadcaster.emit(
+                        "job_success",
+                        platform=self.id,
+                        email=email,
+                        vault_id=v_id,
+                        target_country=snapshot.target_country,
+                    )
+                except Exception as vault_err:
+                    logger.warning(f"[{self.id}] 固化身份档案警告: {vault_err}")
+
                 if auto_push:
                     try:
                         self.push(ctx, result, self.kits)
@@ -201,6 +240,14 @@ class BaseSitePlugin(ABC):
                         logger.warning(f"[{self.id}] 推送下游网关时出现非阻塞异常: {push_err}")
             else:
                 logger.warning(f"[{self.id}] 注册执行未达预期: {result.error}")
+                stream_broadcaster.emit_error(
+                    error_code="REGISTRATION_FAILED",
+                    message=str(result.error),
+                    recovery_action="rotate_country_proxy",
+                    platform=self.id,
+                    email=email,
+                    suggested_params={"country": getattr(self, "target_country", "US")},
+                )
                 if effective_proxy:
                     try:
                         from core.ip_quota_manager import ip_quota_manager
@@ -213,6 +260,13 @@ class BaseSitePlugin(ABC):
 
         except Exception as exc:
             logger.error(f"[{self.id}] 注册流水线异常中断 ({email}): {exc}", exc_info=True)
+            stream_broadcaster.emit_error(
+                error_code="UNEXPECTED_EXCEPTION",
+                message=str(exc),
+                recovery_action="inspect_logs",
+                platform=self.id,
+                email=email,
+            )
             return RegistrationResult(
                 ok=False,
                 email=email,

@@ -32,6 +32,8 @@ class KiroPlugin(BaseSitePlugin):
     target_url = "https://view.awsapps.com/start"
     table_name = "kiro_accounts"
     browser_type = "cloak"
+    tier = "pure_protocol"
+    target_country = "US"
     requires_human = False
     default_headless = True
 

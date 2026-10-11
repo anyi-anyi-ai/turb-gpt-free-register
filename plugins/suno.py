@@ -31,6 +31,8 @@ class SunoPlugin(BaseSitePlugin):
     target_url = "https://suno.com/sign-up"
     table_name = "suno_accounts"
     browser_type = "cloak"
+    tier = "hybrid"
+    target_country = "US"
     requires_human = False
     default_headless = True
 

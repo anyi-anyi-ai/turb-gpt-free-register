@@ -63,6 +63,8 @@ class PluginRegistry:
                 "target_url": p_cls.target_url,
                 "table_name": p_cls.table_name,
                 "browser_type": p_cls.browser_type,
+                "tier": getattr(p_cls, "tier", "heavy_browser"),
+                "target_country": getattr(p_cls, "target_country", "US"),
                 "requires_human": p_cls.requires_human,
                 "default_headless": p_cls.default_headless,
             })
@@ -106,3 +108,14 @@ class PluginRegistry:
 def register_plugin(cls: Type[BaseSitePlugin]) -> Type[BaseSitePlugin]:
     """快捷注册装饰器。"""
     return PluginRegistry.register(cls)
+
+
+def get_plugin_class(plugin_id: str) -> Optional[Type[BaseSitePlugin]]:
+    """获取指定平台的插件类。"""
+    return PluginRegistry.get(plugin_id)
+
+
+def list_plugins() -> List[Dict[str, Any]]:
+    """列出所有已装载插件的元数据。"""
+    return PluginRegistry.list_all()
+

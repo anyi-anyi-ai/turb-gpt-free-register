@@ -82,34 +82,62 @@ def handle_list(args: argparse.Namespace) -> None:
 
 def handle_run(args: argparse.Namespace) -> None:
     """处理 run 命令：执行注册流水线。"""
+    from core.agent_bridge import stream_broadcaster
+
+    is_stream = getattr(args, "stream", False)
+    if is_stream:
+        stream_broadcaster.enable_streaming(True)
+        # 流式模式下静默普通日志，避免污染标准输出的 NDJSON 事件
+        logging.getLogger().setLevel(logging.WARNING)
+
     plugin_id = args.platform.lower().strip()
     plugin_cls = PluginRegistry.get(plugin_id)
 
     if not plugin_cls:
-        print(f"\n[!] 未知平台: '{plugin_id}'")
-        print(f"[*] 可用平台列表: {', '.join([p['id'] for p in PluginRegistry.list_all()])}")
-        print("[*] 运行 `python turb.py list` 查看完整平台清单。\n")
+        if is_stream:
+            stream_broadcaster.emit_error(
+                error_code="UNKNOWN_PLATFORM",
+                message=f"未知平台: '{plugin_id}'",
+                recovery_action="check_platform_list",
+                platform=plugin_id,
+            )
+        else:
+            print(f"\n[!] 未知平台: '{plugin_id}'")
+            print(f"[*] 可用平台列表: {', '.join([p['id'] for p in PluginRegistry.list_all()])}")
+            print("[*] 运行 `python turb.py list` 查看完整平台清单。\n")
         sys.exit(1)
 
     plugin = plugin_cls()
+    if getattr(args, "country", None):
+        plugin.target_country = args.country
+
     count = max(1, args.count)
     headless = False if args.headful else (True if args.headless else None)
     auto_push = not args.no_push
 
-    print("\n" + "=" * 80)
-    print(f"🎯 启动注册任务: 目标平台 [{plugin.name}] ({plugin.id})")
-    print(f"📊 计划注册数量: {count} 个")
-    if args.email:
-        print(f"📧 指定邮箱: {args.email}")
-    if plugin.requires_human:
-        print("🧩 [提示] 该平台需要人机协作拼图，脚本已自动挂载可视化窗口并实时监听！")
-    print("=" * 80 + "\n")
+    if not is_stream:
+        print("\n" + "=" * 80)
+        print(f"🎯 启动注册任务: 目标平台 [{plugin.name}] ({plugin.id})")
+        print(f"📊 计划注册数量: {count} 个 | 出口国家: {getattr(plugin, 'target_country', 'US')} | 模式: {getattr(plugin, 'tier', 'heavy_browser')}")
+        if args.email:
+            print(f"📧 指定邮箱: {args.email}")
+        if plugin.requires_human:
+            print("🧩 [提示] 该平台需要人机协作拼图，脚本已自动挂载可视化窗口并实时监听！")
+        print("=" * 80 + "\n")
+    else:
+        stream_broadcaster.emit(
+            "run_started",
+            platform=plugin.id,
+            count=count,
+            tier=getattr(plugin, "tier", "heavy_browser"),
+            country=getattr(plugin, "target_country", "US"),
+        )
 
     success_cnt = 0
     fail_cnt = 0
 
     for i in range(1, count + 1):
-        if count > 1:
+        if count > 1 and not is_stream:
             print(f"\n--- 正在执行第 {i}/{count} 个账号注册 ---")
 
         res = plugin.run(
@@ -121,17 +149,80 @@ def handle_run(args: argparse.Namespace) -> None:
 
         if res.ok:
             success_cnt += 1
-            print(f"[✓] 成功完成: {res.email} (Status: {res.status})")
+            if not is_stream:
+                print(f"[✓] 成功完成: {res.email} (Status: {res.status}) [Vault: {res.metadata.get('vault_id', 'N/A')}]")
         else:
             fail_cnt += 1
-            print(f"[✗] 注册失败: {res.email} - 原因: {res.error}")
+            if not is_stream:
+                print(f"[✗] 注册失败: {res.email} - 原因: {res.error}")
 
         if i < count:
             time.sleep(2.0)
 
-    print("\n" + "=" * 80)
-    print(f"🏁 任务执行完毕 | 成功: {success_cnt} | 失败: {fail_cnt} | 总计: {count}")
-    print("=" * 80 + "\n")
+    if not is_stream:
+        print("\n" + "=" * 80)
+        print(f"🏁 任务执行完毕 | 成功: {success_cnt} | 失败: {fail_cnt} | 总计: {count}")
+        print("=" * 80 + "\n")
+    else:
+        stream_broadcaster.emit(
+            "run_completed",
+            platform=plugin.id,
+            total=count,
+            success=success_cnt,
+            failed=fail_cnt,
+        )
+
+
+def handle_vault(args: argparse.Namespace) -> None:
+    """处理 vault 命令：查看与还原身份资产档案。"""
+    from core.vault.identity_vault import get_identity_vault
+
+    vault = get_identity_vault()
+    action = getattr(args, "vault_action", "list")
+
+    if action == "list":
+        identities = vault.list_identities(
+            platform=getattr(args, "platform", None),
+            country=getattr(args, "country", None),
+        )
+        if getattr(args, "json", False):
+            print(json.dumps([i.to_dict() for i in identities], ensure_ascii=False, indent=2))
+            return
+
+        print("\n" + "=" * 90)
+        print(f"🔐 统一身份档案库 (Identity Vault) — 已固化 {len(identities)} 条全生命周期资产")
+        print("-" * 90)
+        print(f"{'Vault ID':<32} {'平台':<12} {'账号/邮箱':<28} {'出口国家':<8} {'驱动':<10}")
+        print("-" * 90)
+        if not identities:
+            print("暂无已固化的身份档案。")
+        for i in identities:
+            print(f"{i.vault_id:<32} {i.platform:<12} {i.account_id:<28} {i.target_country:<8} {i.driver_type:<10}")
+        print("=" * 90 + "\n")
+
+    elif action == "inspect":
+        vault_id = args.vault_id
+        snapshot = vault.get_identity(vault_id)
+        if not snapshot:
+            print(f"[!] 未找到指定身份档案: {vault_id}")
+            sys.exit(1)
+        print(json.dumps(snapshot.to_dict(), ensure_ascii=False, indent=2))
+
+    elif action == "restore":
+        vault_id = args.vault_id
+        try:
+            ctx = vault.restore_session_context(vault_id)
+            print(f"\n[✓] 成功还原身份环境 ({vault_id}):")
+            print(f"    - 平台: {ctx['platform']}")
+            print(f"    - 账号: {ctx['account_id']}")
+            print(f"    - 出口国家一致性保障: {ctx['target_country']}")
+            print(f"    - 分配代理出口: {ctx['proxy']}")
+            print(f"    - 硬件指纹 Seed: {ctx['fingerprint_seed']}")
+            print(f"    - 载入 Cookies 数: {len(ctx.get('cookies') or [])} 条\n")
+        except Exception as e:
+            print(f"[✗] 还原身份环境异常: {e}")
+            sys.exit(1)
+
 
 
 def handle_accounts(args: argparse.Namespace) -> None:
@@ -209,9 +300,26 @@ def main() -> None:
     p_run.add_argument("--count", type=int, default=1, help="注册账号数量 (默认 1)")
     p_run.add_argument("--email", type=str, default=None, help="指定领取的特定邮箱")
     p_run.add_argument("--proxy", type=str, default=None, help="指定代理节点")
+    p_run.add_argument("--stream", action="store_true", help="启用 NDJSON 逐行流式事件输出 (专供 Agent 实时监听)")
+    p_run.add_argument("--country", type=str, default=None, help="指定或覆盖目标出口地区/国家 (例如 US, DE, ES)")
     p_run.add_argument("--headful", action="store_true", help="强制以可视化有头窗口运行")
     p_run.add_argument("--headless", action="store_true", help="强制以无头模式运行")
     p_run.add_argument("--no-push", action="store_true", help="跳过下游网关同步")
+
+    # vault (统一身份档案库)
+    p_vault = subparsers.add_parser("vault", help="查看与还原统一身份档案 (Identity Vault)")
+    p_vault_subs = p_vault.add_subparsers(dest="vault_action", help="身份档案操作")
+
+    p_v_list = p_vault_subs.add_parser("list", help="查看已固化的身份档案列表")
+    p_v_list.add_argument("--platform", type=str, default=None, help="按平台筛选")
+    p_v_list.add_argument("--country", type=str, default=None, help="按出口国家筛选")
+    p_v_list.add_argument("--json", action="store_true", help="输出完整 JSON 数组")
+
+    p_v_inspect = p_vault_subs.add_parser("inspect", help="查看单条身份档案详情")
+    p_v_inspect.add_argument("vault_id", type=str, help="档案 ID")
+
+    p_v_restore = p_vault_subs.add_parser("restore", help="还原指定账号的同国家 IP 与硬件指纹上下文")
+    p_v_restore.add_argument("vault_id", type=str, help="档案 ID")
 
     # accounts
     p_acc = subparsers.add_parser("accounts", help="查看指定平台的已注册账号列表")
@@ -231,6 +339,8 @@ def main() -> None:
         handle_list(args)
     elif args.command == "run":
         handle_run(args)
+    elif args.command == "vault":
+        handle_vault(args)
     elif args.command == "accounts":
         handle_accounts(args)
     elif args.command == "preflight":
