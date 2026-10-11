@@ -322,6 +322,22 @@ def acquire_number(
     own_http = http is None
     http = http or _http()
     try:
+        if _provider() in ("vak", "vaksms"):
+            from core.sms.vak_provider import VakSmsProvider
+            vp = VakSmsProvider()
+            svc = service or _cfg.SMS_SERVICE
+            ctry = country or getattr(_cfg, "SMS_COUNTRY", None)
+            max_p = None
+            if getattr(_cfg, "VAK_MAX_PRICE", None):
+                try:
+                    max_p = float(_cfg.VAK_MAX_PRICE)
+                except ValueError:
+                    pass
+            num = vp.acquire_number(service=svc, country=ctry if ctry != "10" else None, max_price=max_p)
+            _ACQUIRED_AT[num.id] = time.time()
+            logger.info(f"[SMS:VAK] 取号成功：id={num.id}, phone=+{num.raw_phone}, country={num.country}")
+            return num.id, num.raw_phone
+
         if _provider() == "l":
             payload = {
                 "service": service or _cfg.SMS_SERVICE,
@@ -449,6 +465,15 @@ def wait_for_sms_code(
                 f"[SMS] 第 {round_no} 轮获取验证码 activation_id={activation_id}，"
                 f"已等 {elapsed}s，剩余约 {remaining_before}s"
             )
+            if provider in ("vak", "vaksms"):
+                from core.sms.vak_provider import VakSmsProvider
+                vp = VakSmsProvider()
+                code = vp.wait_for_sms_code(activation_id, timeout=int(deadline - time.time()), interval=interval)
+                if code:
+                    logger.info(f"[SMS:VAK] 收到验证码：{code}")
+                    return code
+                break
+
             if provider == "l":
                 data = _post_l_json(http, "/api/admin/l/fetch-code", {"id": activation_id})
                 code = str(data.get("code") or "").strip()
@@ -515,6 +540,11 @@ def set_status(activation_id: str, status: int, http: CurlSession | None = None)
     own_http = http is None
     http = http or _http()
     try:
+        if _provider() in ("vak", "vaksms"):
+            from core.sms.vak_provider import VakSmsProvider
+            st_map = {1: "send", 3: "send", 6: "end", 8: "bad"}
+            VakSmsProvider().set_status(activation_id, st_map.get(status, "end"))
+            return "OK"
         if _provider() == "l":
             logger.debug(f"[SMS:L] 忽略状态设置 id={activation_id}, status={status}")
             return "OK"
@@ -526,6 +556,16 @@ def set_status(activation_id: str, status: int, http: CurlSession | None = None)
 
 def complete(activation_id: str, http: CurlSession | None = None) -> None:
     """标记激活完成（status=6）。失败只告警不抛，避免影响主流程。"""
+    if _provider() in ("vak", "vaksms"):
+        try:
+            from core.sms.vak_provider import VakSmsProvider
+            VakSmsProvider().set_status(activation_id, "end")
+            logger.info(f"[SMS:VAK] 已完成 id={activation_id}")
+        except Exception as exc:
+            logger.warning(f"[SMS:VAK] 标记完成失败: {exc}")
+        finally:
+            _ACQUIRED_AT.pop(activation_id, None)
+        return
     if _provider() == "l":
         logger.info(f"[SMS:L] 已完成 id={activation_id}")
         _ACQUIRED_AT.pop(activation_id, None)
@@ -592,6 +632,16 @@ def cancel(activation_id: str, http: CurlSession | None = None, background: bool
 
     失败只告警不抛，不影响主流程。
     """
+    if _provider() in ("vak", "vaksms"):
+        try:
+            from core.sms.vak_provider import VakSmsProvider
+            VakSmsProvider().set_status(activation_id, "bad")
+            logger.info(f"[SMS:VAK] 已释放退款 id={activation_id}")
+        except Exception as exc:
+            logger.warning(f"[SMS:VAK] 释放退款失败: {exc}")
+        finally:
+            _ACQUIRED_AT.pop(activation_id, None)
+        return
     if _provider() == "l":
         try:
             _release_l_number(activation_id, http=http)

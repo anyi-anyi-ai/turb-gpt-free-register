@@ -101,3 +101,44 @@ run/
 
 # 参考借鉴资料
 项目借鉴和参考/
+
+# ============================================================
+# 运行态资产、代理与敏感数据
+# ============================================================
+proxies_*.txt
+all_harvested_proxies_*.txt
+emails.txt
+expired_emails.json
+tokens/
+outlook_accounts/
+runtime/
+scratch/
+generated_music/
+screenshots_outlook/
+
+# 调试与生成临时产物
+*_session_dump.json
+feed_result.json
+final_generation_log.json
+full_song_clip_meta.json
+generation_network_log.json
+last_registered_stableaudio.json
+nuxt_detail.json
+t2i_webapps.json
+terms_card_live.json
+terms_card.html
+dump.xml
+*.xml
+*.ico
+icon_crop.png
+icon_mask.png
+
+# 二进制可执行文件与运行时数据库
+*.apk
+*.exe
+*.zip
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+core/relay/data/

@@ -3,7 +3,10 @@
 > 本项目已从最初单纯的 ChatGPT 注册器，深度升级演进为**全矩阵多平台自动化账号注册、风控攻防、凭据提取、网关同步与资产管理中枢**。  
 > 现已打通对话模型（ChatGPT/Grok/Kiro）、音频生成（Suno/Udio/ElevenLabs/StableAudio/Muse）、视频工作流（RunningHub/Video API）、开发者与学术平台（GitHub/UNED/Outlook/Gmail）全业务线，并深度集成了通用视觉大模型验证码求解、拟人反爬轨迹、多代理智能路由与自动收割造血生态。
 > 
-> 🚀 **【2026 前沿攻防架构升级】**：已全面引入 **Patchright 隐身无泄露驱动**、**nodriver 原生极速管线**、**本地 0 成本 Whisper 双模听力打码**、**生物动力学击键纠错 (Dwell/Flight)** 以及 **IP 质量前置熔断门禁**！完整架构细节与启动命令请查阅专属说明书：👉 **[UPGRADE_SPEC.md (前沿架构升级与新特性说明书)](./UPGRADE_SPEC.md)** 👈
+> 🚀 **【统一调度中枢与插件化升级】**：全平台注册命令已 100% 收敛至统一中枢 **`python turb.py run <platform>`**！Agent 与人类操作员**无需阅读任何底层代码**即可秒级自省与调度全平台！
+> 👉 **[【必读任务书】全平台操作指南与任务书 (TURB_OPERATIONS_MANUAL.md)](./TURB_OPERATIONS_MANUAL.md)** 👈  
+> 👉 **[【Agent 调度契约】零代码阅读自省法则 (AGENTS.md)](./AGENTS.md)** 👈  
+> 👉 **[【前沿技术规范】2026 前沿攻防架构升级说明书 (UPGRADE_SPEC.md)](./UPGRADE_SPEC.md)** 👈
 
 ---
 

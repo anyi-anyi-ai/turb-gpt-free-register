@@ -58,37 +58,112 @@ from common import outlook_press as _outlook_press
 from common.browser import react_fill
 from common.traffic_saver import install as install_traffic_saver
 
+try:
+    from core.human_dynamics import BiometricMouse, BiometricKeyboard
+except ImportError:
+    BiometricMouse = None
+    BiometricKeyboard = None
+
+try:
+    from core.fingerprint import derive_account_fingerprint_seed
+except ImportError:
+    derive_account_fingerprint_seed = None
+
+try:
+    from core.perimeterx.detector import detect_perimeterx_gate, is_perimeterx_visible
+    from core.perimeterx.outlook_solver import solve_perimeterx_gate
+except ImportError:
+    detect_perimeterx_gate = None
+    is_perimeterx_visible = None
+    solve_perimeterx_gate = None
+
+
+async def _bio_move_and_hover(page, locator_or_box):
+    """Move mouse with 5-phase biometric curve and hover over target."""
+    if not BiometricMouse:
+        return
+    try:
+        box = None
+        if hasattr(locator_or_box, "bounding_box"):
+            box = await locator_or_box.bounding_box()
+        elif isinstance(locator_or_box, dict) and "x" in locator_or_box:
+            box = locator_or_box
+        if box:
+            cx = box["x"] + box["width"] * random.betavariate(2.5, 2.5)
+            cy = box["y"] + box["height"] * random.betavariate(2.5, 2.5)
+            await BiometricMouse.move_playwright(page, cx, cy)
+            await asyncio.sleep(random.uniform(0.06, 0.15))
+    except Exception:
+        pass
+
+
+async def _bio_click(page, locator):
+    """Click element using biometric approach, hover dwell, down and up."""
+    if BiometricMouse:
+        try:
+            await BiometricMouse.click_playwright(page, locator)
+            return
+        except Exception:
+            pass
+    await locator.click()
+
+
+async def _bio_type(page, text, delay_range=(45, 85)):
+    """Type text with realistic flight intervals and dwell times."""
+    if BiometricKeyboard:
+        try:
+            for ch in text:
+                dwell_ms = int(BiometricKeyboard.get_dwell_time() * 1000)
+                await page.keyboard.press(ch, delay=dwell_ms)
+                await asyncio.sleep(BiometricKeyboard.get_flight_time() * 0.7)
+            return
+        except Exception:
+            pass
+    await page.keyboard.type(text, delay=random.randint(*delay_range))
+
+
+async def _human_idle_drift(page, count=2):
+    """Simulate subtle human hand resting/wandering on mouse while waiting or reading."""
+    if not BiometricMouse:
+        await asyncio.sleep(random.uniform(0.3, 0.6))
+        return
+    try:
+        cur = getattr(page, "_bio_mouse_pos", (random.randint(300, 600), random.randint(250, 450)))
+        for _ in range(count):
+            dx = random.randint(-45, 45)
+            dy = random.randint(-30, 30)
+            tx = max(80, min(950, cur[0] + dx))
+            ty = max(80, min(650, cur[1] + dy))
+            await BiometricMouse.move_playwright(page, tx, ty)
+            cur = (tx, ty)
+            await asyncio.sleep(random.uniform(0.15, 0.35))
+    except Exception:
+        pass
+
 # BitBrowser local API
 BITBROWSER_API = os.environ.get("BITBROWSER_API", "http://127.0.0.1:54345")
 
 
 def ensure_clash_proxy_env():
-    """Use .env CLASH_PROXY for direct standalone runs, while local APIs stay direct."""
+    """Use allocated proxy or direct, avoid leaking default 7890 datacenter IP."""
     existing = (
         os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
         or os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
         or ""
     ).strip()
-    proxy = existing or os.environ.get("CLASH_PROXY", "").strip()
-    if not proxy:
+    if existing:
+        return existing
+    outlook_proxies = os.environ.get("OUTLOOK_PROXIES", "").strip()
+    if outlook_proxies:
         return ""
-    if not existing:
-        os.environ["HTTP_PROXY"] = os.environ["HTTPS_PROXY"] = proxy
-        os.environ["http_proxy"] = os.environ["https_proxy"] = proxy
-    no_proxy = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
-    parts = [p.strip() for p in no_proxy.split(",") if p.strip()]
-    for item in ("127.0.0.1", "localhost", "::1"):
-        if item not in parts:
-            parts.append(item)
-    os.environ["NO_PROXY"] = os.environ["no_proxy"] = ",".join(parts)
-    return proxy
+    return ""
 
 
 def _fingerprint_provider():
     return (
         os.environ.get("FINGERPRINT_BROWSER")
         or os.environ.get("BROWSER_PROVIDER")
-        or "bitbrowser"
+        or "cloak"
     ).strip().lower()
 
 # CAPTCHA solver keys（环境变量，默认空）
@@ -421,11 +496,20 @@ def generate_name():
     return random.choice(first_names), random.choice(last_names)
 
 
-def generate_email_password(domain=None):
-    """Generate random Outlook email and password."""
-    prefix = random.choice(string.ascii_lowercase) + "".join(
-        random.choices(string.ascii_lowercase + string.digits, k=11)
-    )
+def generate_email_password(domain=None, name_pair=None):
+    """Generate human-realistic Outlook email and password."""
+    if name_pair:
+        first, last = name_pair
+    else:
+        first, last = generate_name()
+    r_digits = str(random.randint(100, 9999))
+    style = random.choice([1, 2, 3])
+    if style == 1:
+        prefix = f"{first.lower()}{last.lower()}{r_digits}"
+    elif style == 2:
+        prefix = f"{first.lower()}{random.randint(10, 99)}{last.lower()}{random.randint(10, 99)}"
+    else:
+        prefix = f"{first[0].lower()}{last.lower()}{r_digits}"
     domain = domain or _preferred_outlook_domain()
     email = f"{prefix}@{domain}"
     password = "Aa1!" + "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
@@ -784,13 +868,12 @@ async def _signup_email_domains_after_blur(email_input):
 
 
 _SIGNUP_EMAIL_SELECTOR = (
-    'input[type="email"]:visible, input[name="MemberName"]:visible, '
-    'input[id="MemberName"]:visible, input[id="usernameInput"]:visible, '
-    'input[name="Username"]:visible'
+    'input[name="MemberName"], input#MemberName, input[type="email"], '
+    'input#usernameInput, input[name="Username"]'
 )
 _SIGNUP_PASSWORD_SELECTOR = (
-    'input[type="password"]:visible, input[name="Password"]:visible, '
-    'input[id="PasswordInput"]:visible, input[name="passwd"]:visible'
+    'input[type="password"], input[name="Password"], '
+    'input#PasswordInput, input[name="passwd"]'
 )
 
 
@@ -964,8 +1047,7 @@ async def _click_microsoft_action(
             for (const id of preferredIds) {
                 const el = document.getElementById(id);
                 if (el && visible(el) && !blocked(textOf(el))) {
-                    el.click();
-                    return textOf(el) || '#' + id;
+                    return el;
                 }
             }
             const controls = document.querySelectorAll(
@@ -977,8 +1059,7 @@ async def _click_microsoft_action(
                 const text = textOf(el);
                 if (!text || blocked(text)) continue;
                 if (labels.some(label => text === label || text.startsWith(label + ' '))) {
-                    el.click();
-                    return text;
+                    return el;
                 }
             }
             const positiveIdentifiers = new Set([
@@ -997,11 +1078,10 @@ async def _click_microsoft_action(
                 const tokens = semantic.split(/[^a-z0-9]+/).filter(Boolean);
                 if (tokens.some(token => negativeIdentifiers.has(token))) continue;
                 if (tokens.some(token => positiveIdentifiers.has(token))) {
-                    el.click();
-                    return semantic || textOf(el);
+                    return el;
                 }
             }
-            return '';
+            return null;
         }"""
     payload = {
         "labels": [label.lower() for label in labels],
@@ -1018,9 +1098,32 @@ async def _click_microsoft_action(
         pass
     for target in targets:
         try:
-            clicked = await target.evaluate(script, payload)
-            if clicked:
-                return clicked
+            handle = await target.evaluate_handle(script, payload)
+            el = handle.as_element() if handle else None
+            if el:
+                try:
+                    text = (await target.evaluate("el => el.innerText || el.value || el.id", el)) or "button"
+                    await el.scroll_into_view_if_needed()
+                    await asyncio.sleep(random.uniform(0.08, 0.18))
+                    try:
+                        box = await el.bounding_box()
+                        if box and BiometricMouse:
+                            cx = box["x"] + box["width"] * random.betavariate(2.5, 2.5)
+                            cy = box["y"] + box["height"] * random.betavariate(2.5, 2.5)
+                            await BiometricMouse.move_playwright(page, cx, cy)
+                            await asyncio.sleep(random.uniform(0.06, 0.16))
+                            await page.mouse.down()
+                            await asyncio.sleep(random.uniform(0.06, 0.14))
+                            await page.mouse.up()
+                        else:
+                            await el.hover()
+                            await asyncio.sleep(random.uniform(0.06, 0.14))
+                            await el.click(delay=random.randint(55, 115))
+                    except Exception:
+                        await target.evaluate("el => el.click()", el)
+                    return str(text).strip() or "clicked"
+                finally:
+                    await handle.dispose()
         except Exception:
             continue
     return ""
@@ -1225,7 +1328,7 @@ async def _select_native_numeric_option(select, value):
 
 
 async def _signup_email_rejected(page, email_input):
-    """Detect a rejected alias from field validity/ARIA before localized text."""
+    """Detect a rejected alias from field validity/ARIA error text."""
     try:
         if await email_input.count() == 0:
             return ""
@@ -1233,33 +1336,23 @@ async def _signup_email_rejected(page, email_input):
             const described = (el.getAttribute('aria-describedby') || '')
                 .split(/\s+/).filter(Boolean)
                 .map(id => document.getElementById(id)?.innerText || '').join(' ');
-            const nearby = el.closest('form, [role="main"], main')?.innerText || '';
+            const alert = document.querySelector('#MemberNameError, [role="alert"]')?.innerText || '';
+            const errorText = [el.validationMessage, described, alert].join(' ').trim().toLowerCase();
             return {
-                ariaInvalid: el.getAttribute('aria-invalid') === 'true',
-                typeMismatch: !!el.validity?.typeMismatch,
-                patternMismatch: !!el.validity?.patternMismatch,
-                customError: !!el.validity?.customError,
-                message: [el.validationMessage, described, nearby].join(' ').toLowerCase(),
+                hasError: el.getAttribute('aria-invalid') === 'true' || !!el.validity?.typeMismatch || !!el.validity?.patternMismatch || !!el.validity?.customError || errorText.length > 0,
+                errorText: errorText,
                 visible: !!el.offsetParent,
             };
         }""", timeout=1000)
     except Exception:
         state = {}
-    message = state.get("message") or ""
-    format_markers = (
-        "valid", "format", "letter", "caractère", "formato", "gültig",
-        "válido", "valido", "corretto", "geldig", "prawidł", "допустим",
-        "geçerli", "मान्य", "अक्षर", "huruf", "格式", "有效", "文字", "올바른",
-    )
-    if (
-        state.get("typeMismatch")
-        or state.get("patternMismatch")
-        or any(marker in message for marker in format_markers)
-    ):
-        return "format"
-    if state.get("ariaInvalid") or state.get("customError"):
+    if not state.get("hasError"):
+        return ""
+    err = state.get("errorText") or ""
+    taken_markers = ("already", "taken", "another", "claim", "exist", "occupé", "existe", "ocupad", "bereits", "già", "in gebruik", "zajęt", "уже занят", "önceden", "पहले", "sudah", "已存在", "已被占用", "既に", "이미")
+    if any(m in err for m in taken_markers):
         return "taken"
-    return ""
+    return "format"
 
 
 def _microsoft_direct_session():
@@ -2102,10 +2195,64 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
     tag = f"[#{idx}]"
 
     try:
-        print(f"  {tag} navigating to signup page...")
-        signup_url = _microsoft_url_with_locale("https://signup.live.com/signup?lic=1")
-        await _navigate_to_signup(page, signup_url, tag)
-        await asyncio.sleep(3)
+        def _log_request(req):
+            url = req.url
+            if any(url.lower().endswith(ext) for ext in (".png", ".jpg", ".css", ".svg", ".woff", ".woff2", ".ico")):
+                return
+            if not any(k in url.lower() for k in ("google", "clarity", "bing")):
+                print(f"  {tag}[REQ] {req.method} {url[:95]}")
+                if "risk" in url or "verify" in url:
+                    try:
+                        print(f"  {tag}[REQ HEADERS] {dict(req.headers)}")
+                        pdata = req.post_data
+                        if pdata:
+                            print(f"  {tag}[REQ POST DATA] {pdata[:400]}")
+                    except Exception:
+                        pass
+                if "clienterror" in url.lower():
+                    try:
+                        import urllib.parse
+                        print(f"  {tag}[PX-CLIENT-ERROR] {urllib.parse.unquote(url)}")
+                    except Exception:
+                        pass
+
+        async def _log_response(resp):
+            url = resp.url
+            if any(url.lower().endswith(ext) for ext in (".png", ".jpg", ".css", ".svg", ".woff", ".woff2", ".ico")):
+                return
+            if any(k in url.lower() for k in ("google", "clarity", "bing")):
+                return
+            status = resp.status
+            method = resp.request.method
+            body = ""
+            try:
+                body = await resp.text()
+            except Exception:
+                pass
+            print(f"  {tag}[NET] {method} {url[:95]} -> {status} ({len(body)}b)")
+            if "risk" in url or "initialize" in url:
+                print(f"  {tag}[RISK-RESP] {body[:500]}")
+            if status >= 400 or any(err in body.lower() for err in ("error", "block", "denied", "forbidden", "unusual")):
+                clean_body = " ".join(body.split())
+                if len(clean_body) > 350:
+                    clean_body = clean_body[:350] + "..."
+                print(f"  {tag}[NET ERROR/WARN] {clean_body}")
+
+        page.on("request", _log_request)
+        page.on("response", _log_response)
+        page.on("pageerror", lambda err: print(f"  {tag}[PAGE-ERR] {err}"))
+        print(f"  {tag} navigating via official Outlook client entry link...")
+        entry_url = "https://go.microsoft.com/fwlink/p/?linkid=2125440"
+        await _navigate_to_signup(page, entry_url, tag)
+        for _wait_landing in range(30):
+            if "signup.live.com" in page.url.lower():
+                try:
+                    if await _signup_email_input(page).count() > 0:
+                        break
+                except Exception:
+                    pass
+            await asyncio.sleep(1)
+        await asyncio.sleep(2)
         await _safe_screenshot(page, f"{SCREENSHOT_DIR}/outlook_{idx}_start.png")
         await _maybe_confirm_before_register(page, tag, captcha_early_abort)
 
@@ -2152,18 +2299,31 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
 
         # Generate the alias after loading the page.  The network exit may
         # expose a regional domain picker (for example outlook.jp).
-        email, password, prefix = generate_email_password()
+        first_name, last_name = generate_name()
+        email, password, prefix = generate_email_password(name_pair=(first_name, last_name))
         selected_domain = _preferred_outlook_domain()
         print(f"  {tag} registering: {email}")
 
         # Step 1: Enter email
         email_ok = False
+        email_input = None
+        for _wait_inp in range(25):
+            candidate = _signup_email_input(page)
+            try:
+                if await candidate.count() > 0 and await candidate.is_visible():
+                    email_input = candidate
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(1)
+
+        if not email_input:
+            print(f"  {tag} email input not found")
+            await _safe_screenshot(page, f"{SCREENSHOT_DIR}/outlook_{idx}_no_email.png")
+            return None, None
+
         for retry in range(5):
             email_input = _signup_email_input(page)
-            if await email_input.count() == 0:
-                print(f"  {tag} email input not found")
-                await _safe_screenshot(page, f"{SCREENSHOT_DIR}/outlook_{idx}_no_email.png")
-                return None, None
 
             domain_dropdown = page.locator(
                 'select[id="LiveDomainBoxList"], select[name="LiveDomainBoxList"], #LiveDomainBoxList'
@@ -2218,6 +2378,7 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
                     _SIGNUP_EMAIL_SELECTOR,
                     entry_value,
                     tries=3,
+                    check_validity=False,
                 )
                 print(f"  {tag} filled full email: {entry_value}")
 
@@ -2314,9 +2475,13 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
             await asyncio.sleep(1)
 
         if pwd_input and await pwd_input.count() > 0:
-            await pwd_input.fill(password)
+            await _bio_move_and_hover(page, pwd_input)
+            await _bio_click(page, pwd_input)
+            await asyncio.sleep(random.uniform(0.15, 0.3))
+            await _bio_type(page, password, delay_range=(40, 75))
             print(f"  {tag} password filled")
-            await asyncio.sleep(0.5)
+            await _human_idle_drift(page, count=1)
+            await asyncio.sleep(random.uniform(1.0, 1.8))
 
             clicked_next = await _click_microsoft_action(
                 page, preferred_ids=("iSignupAction", "iNext", "idSIButton9"),
@@ -2496,8 +2661,9 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
             await asyncio.sleep(3)
 
         # Step 5: First/Last Name + checkbox (Chinese: 姓/名)
-        first_name, last_name = generate_name()
-        await asyncio.sleep(2)
+        if not first_name or not last_name:
+            first_name, last_name = generate_name()
+        await asyncio.sleep(random.uniform(1.2, 2.2))
 
         for _ in range(10):
             fname_input = page.locator(
@@ -2532,29 +2698,90 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
             await asyncio.sleep(1)
 
         if await fname_input.count() > 0:
+            await _bio_move_and_hover(page, fname_input)
+            await _bio_click(page, fname_input)
+            await asyncio.sleep(random.uniform(0.12, 0.28))
+            await _bio_type(page, first_name, delay_range=(45, 80))
+            await _human_idle_drift(page, count=1)
+            await asyncio.sleep(random.uniform(0.2, 0.45))
             if await lname_input.count() > 0:
-                await lname_input.fill(last_name)
-            await fname_input.fill(first_name)
+                await _bio_move_and_hover(page, lname_input)
+                await _bio_click(page, lname_input)
+                await asyncio.sleep(random.uniform(0.12, 0.28))
+                await _bio_type(page, last_name, delay_range=(45, 80))
             print(f"  {tag} name: {first_name} {last_name}")
         else:
             all_text_inputs = page.locator('input[type="text"]')
             count = await all_text_inputs.count()
             if count >= 2:
-                await all_text_inputs.nth(0).fill(last_name)
-                await all_text_inputs.nth(1).fill(first_name)
+                inp0 = all_text_inputs.nth(0)
+                await _bio_move_and_hover(page, inp0)
+                await _bio_click(page, inp0)
+                await asyncio.sleep(random.uniform(0.12, 0.28))
+                await _bio_type(page, first_name, delay_range=(45, 80))
+                await _human_idle_drift(page, count=1)
+                await asyncio.sleep(random.uniform(0.2, 0.45))
+                inp1 = all_text_inputs.nth(1)
+                await _bio_move_and_hover(page, inp1)
+                await _bio_click(page, inp1)
+                await asyncio.sleep(random.uniform(0.12, 0.28))
+                await _bio_type(page, last_name, delay_range=(45, 80))
                 print(f"  {tag} name (generic): {first_name} {last_name}")
 
-        checkbox = page.locator('input[type="checkbox"], [role="checkbox"]').first
-        if await checkbox.count() > 0:
-            try:
-                checked = await checkbox.is_checked()
-            except Exception:
-                checked = False
-            if not checked:
-                await checkbox.click(force=True)
-                print(f"  {tag} checkbox checked")
+        # Checkbox handling (uncheck marketing / check terms)
+        try:
+            card_info = await page.evaluate(r"""() => {
+                const els = Array.from(document.querySelectorAll('input, button, [role="checkbox"]'));
+                return els.map(e => ({
+                    tag: e.tagName,
+                    id: e.id,
+                    name: e.name,
+                    type: e.type,
+                    role: e.getAttribute('role'),
+                    ariaChecked: e.getAttribute('aria-checked'),
+                    checked: e.checked,
+                    text: (e.parentElement ? e.parentElement.innerText : '').slice(0, 50)
+                }));
+            }""")
+            print(f"  {tag} Name page controls: {json.dumps(card_info)}")
+        except Exception as e:
+            print(f"  {tag} card info error: {e}")
 
-        await asyncio.sleep(0.5)
+        for sel in [
+            '#iOptinEmail', 'input[name="iOptinEmail"]', 'input[name*="optin" i]',
+            'input[type="checkbox"]', '[role="checkbox"]'
+        ]:
+            checkbox = page.locator(sel).first
+            if await checkbox.count() > 0:
+                cb_id = (await checkbox.get_attribute("id") or "").lower()
+                cb_name = (await checkbox.get_attribute("name") or "").lower()
+                cb_label = (await checkbox.get_attribute("aria-label") or "").lower()
+                cb_text = ""
+                try:
+                    cb_text = (await checkbox.evaluate("el => el.parentElement ? el.parentElement.innerText : ''") or "").lower()
+                except Exception:
+                    pass
+                is_marketing = any(k in f"{cb_id} {cb_name} {cb_label} {cb_text}" for k in ("optin", "offer", "promo", "marketing", "tips", "information"))
+                try:
+                    checked = await checkbox.is_checked()
+                except Exception:
+                    checked = False
+                if is_marketing and checked:
+                    await _bio_move_and_hover(page, checkbox)
+                    await _bio_click(page, checkbox)
+                    print(f"  {tag} marketing checkbox unchecked (evading anti-bot weight)")
+                    break
+                elif not is_marketing and not checked:
+                    await _bio_move_and_hover(page, checkbox)
+                    await _bio_click(page, checkbox)
+                    print(f"  {tag} terms checkbox checked")
+                    break
+
+        print(f"  {tag} waiting for sensor telemetry aggregation on Name page...")
+        await _human_idle_drift(page, count=4)
+        await asyncio.sleep(random.uniform(4.0, 5.5))
+        await _safe_screenshot(page, f"{SCREENSHOT_DIR}/outlook_{idx}_before_name_submit.png")
+        await asyncio.sleep(random.uniform(1.0, 2.0))
         clicked = await _click_microsoft_action(
             page, preferred_ids=("iSignupAction", "iNext", "idSIButton9"),
         )
@@ -2658,6 +2885,7 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
             if any(kw in page_text for kw in [
                 "帐户创建已被阻止", "已被阻止", "阻止创建",
                 "account creation has been blocked", "has been blocked", "account has been suspended",
+                "we ran into a problem", "try later", "遇到了问题", "稍后再试",
                 "création de compte a été bloquée", "a été bloquée", "bloquée",
                 "creación de la cuenta se ha bloqueado", "cuenta bloqueada",
                 "kontoerstellung wurde blockiert", "konto wurde gesperrt",
@@ -2671,7 +2899,7 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
                 "pembuatan akun telah diblokir", "akun diblokir", "aktivitas tidak biasa",
                 "unusual activity", "异常活动", "activité inhabituelle",
             ]):
-                print(f"  {tag} BLOCKED: account creation blocked by Microsoft")
+                print(f"  {tag} BLOCKED: account creation blocked by Microsoft (we ran into a problem / blocked)")
                 await _safe_screenshot(page, f"{SCREENSHOT_DIR}/outlook_{idx}_blocked.png")
                 return None, None
 
@@ -3168,23 +3396,24 @@ async def _register_one_headless(idx, proxy_str):
                 "--no-default-browser-check",
                 "--window-size=1280,800",
             ]
+            is_headless = os.environ.get("OUTLOOK_HEADLESS", "1") not in ("0", "false", "False")
             try:
                 # Prefer real Chrome binary (better fingerprint than bundled Chromium)
                 browser = await pw.chromium.launch(
                     channel="chrome",
-                    headless=True,
+                    headless=is_headless,
                     proxy=_proxy_for_playwright(proxy_str),
                     args=args,
                 )
-                print(f"  {tag} using real Chrome (headless, no window)")
+                print(f"  {tag} using real Chrome ({'headless, no window' if is_headless else 'headful window'})")
             except Exception:
                 # Fallback to bundled Playwright Chromium
                 browser = await pw.chromium.launch(
-                    headless=True,
+                    headless=is_headless,
                     proxy=_proxy_for_playwright(proxy_str),
                     args=args,
                 )
-                print(f"  {tag} using Playwright Chromium (headless, no window)")
+                print(f"  {tag} using Playwright Chromium ({'headless, no window' if is_headless else 'headful window'})")
 
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
@@ -3299,18 +3528,56 @@ async def _register_one_headless(idx, proxy_str):
 
 async def _register_one_browser(bb, idx, proxy_str, keep_profile=False):
     """
-    Register via BitBrowser full browser (highest traffic, most reliable).
-    Returns (email, password) or (email, password, profile_id, ws) when
-    keep_profile=True.
+    Register via Fingerprint Browser (CloakBrowser native anti-detect, or BitBrowser fallback).
+    Returns (email, password) or (email, password, profile_id, ws) when keep_profile=True.
     """
-    tag = f"[#{idx}][browser]"
+    provider = _fingerprint_provider()
+    tag = f"[#{idx}][{provider}]"
     profile_id = None
     ws = ""
+    email, password = None, None
 
     def _result(email, password, retained_id=None, retained_ws=""):
         if keep_profile:
             return email, password, retained_id, retained_ws
         return email, password
+
+    if provider == "cloak":
+        from common.cloak_browser import CloakBrowserHandle
+        ts = datetime.now().strftime("%m%d_%H%M%S")
+        name = f"outlook_{ts}_{idx}"
+        browser_options = {"proxy_str": proxy_str} if proxy_str else {"proxyType": "noproxy"}
+        if derive_account_fingerprint_seed:
+            seed = derive_account_fingerprint_seed(name)
+            os.environ["CLOAK_FINGERPRINT_SEED"] = seed
+            print(f"  {tag} 绑定确定性指纹种子: {seed}")
+        handle = CloakBrowserHandle(None, profile_id="", name=name)
+        try:
+            print(f"  {tag} 正在启动 CloakBrowser 原生指纹 Chromium...")
+            handle, profile_id, context = await handle.launch(name, browser_options)
+            await install_traffic_saver(context)
+            page = await _browser_page(context, fresh=True)
+            try:
+                from core.live_browser_hub import LiveBrowserHub
+                is_headed = os.environ.get("OUTLOOK_HEADLESS", "1") not in ("1", "true", "True")
+                LiveBrowserHub.get_hub().attach_page(page, auto_open=is_headed)
+            except Exception:
+                pass
+            email, password = await register_outlook(page, context, idx)
+            if keep_profile and email and password:
+                return _result(email, password, handle, "")
+            return _result(email, password)
+        except Exception as e:
+            print(f"  {tag} CloakBrowser 执行异常: {e}")
+            return _result(None, None)
+        finally:
+            if not keep_profile or not (email and password):
+                try:
+                    await handle.close_browser_async()
+                    print(f"  {tag} CloakBrowser 会话已安全关闭")
+                except Exception:
+                    pass
+
     try:
         ts = datetime.now().strftime("%m%d_%H%M%S")
         name = f"outlook_{ts}_{idx}"
@@ -3381,7 +3648,39 @@ async def extract_graph_token_browser(
     bb, email, password, idx=0, proxy_str=None, profile_id=None, ws=""
 ):
     """Authorize Graph via Device Code, reusing a live registration profile when supplied."""
-    tag = f"[#{idx}][graph-browser]"
+    provider = _fingerprint_provider()
+    tag = f"[#{idx}][graph-{provider}]"
+    if provider == "cloak":
+        from common.cloak_browser import CloakBrowserHandle
+        if profile_id and isinstance(profile_id, CloakBrowserHandle):
+            handle = profile_id
+            context = handle.context
+            page = context.pages[0] if context.pages else await context.new_page()
+            try:
+                print(f"  {tag} 复用注册时的 CloakBrowser 实时会话提取 Graph Token...")
+                return await extract_graph_token(page, context, email, password, idx)
+            finally:
+                try:
+                    await handle.close_browser_async()
+                    print(f"  {tag} CloakBrowser 注册上下文清理完成")
+                except Exception:
+                    pass
+        else:
+            name = f"outlook_graph_{datetime.now().strftime('%m%d_%H%M%S')}_{idx}"
+            browser_options = {"proxy_str": proxy_str} if proxy_str else {"proxyType": "noproxy"}
+            handle = CloakBrowserHandle(None, profile_id="", name=name)
+            handle, _, context = await handle.launch(name, browser_options)
+            try:
+                await install_traffic_saver(context)
+                page = await context.new_page()
+                print(f"  {tag} 独立启动 CloakBrowser 会话提取 Graph Token...")
+                return await extract_graph_token(page, context, email, password, idx)
+            finally:
+                try:
+                    await handle.close_browser_async()
+                except Exception:
+                    pass
+
     reused_profile = bool(profile_id)
     try:
         if not profile_id:
@@ -3419,6 +3718,8 @@ async def extract_graph_token_browser(
                 bb.close_browser(profile_id)
                 await asyncio.sleep(2)
                 bb.delete_browser(profile_id)
+            except Exception:
+                pass
                 print(f"  {tag} browser cleaned up")
             except Exception:
                 pass
@@ -3441,9 +3742,9 @@ async def register_one(bb, idx, proxy_str, results, results_lock, live_fh=None, 
     registration_ws = ""
 
     try:
-        # ── 1. Protocol mode (pure HTTP, ~50KB) ──────────────────
-        if mode in ("auto", "protocol"):
-            print(f"  {tag} [1/3] protocol mode...")
+        # ── 1. Protocol mode (pure HTTP, explicitly requested) ──
+        if mode in ("protocol",):
+            print(f"  {tag} [protocol mode] HTTP only...")
             loop = asyncio.get_event_loop()
             email, password = await loop.run_in_executor(
                 None, register_outlook_protocol, proxy_str, idx
@@ -3451,24 +3752,24 @@ async def register_one(bb, idx, proxy_str, results, results_lock, live_fh=None, 
             if email:
                 used_mode = "protocol"
 
-        # ── 2. Headless mode (~70% less traffic than browser) ────
-        # Use shorter timeout so we fall back to browser faster on captcha stall
+        # ── 2. Headless mode (generic Playwright, explicitly requested) ──
         HEADLESS_TIMEOUT = min(REGISTER_TIMEOUT, 180)
-        if not email and mode in ("auto", "headless"):
-            print(f"  {tag} [2/3] headless mode (timeout={HEADLESS_TIMEOUT}s)...")
+        if not email and mode in ("headless",):
+            print(f"  {tag} [headless mode] Playwright generic (timeout={HEADLESS_TIMEOUT}s)...")
             try:
                 email, password = await asyncio.wait_for(
                     _register_one_headless(idx, proxy_str),
                     timeout=HEADLESS_TIMEOUT,
                 )
             except asyncio.TimeoutError:
-                print(f"  {tag} headless timeout → falling back to browser")
+                print(f"  {tag} headless timeout")
             if email:
                 used_mode = "headless"
 
-        # ── 3. Browser mode (BitBrowser, full GUI) ───────────────
-        if not email and mode in ("auto", "browser"):
-            print(f"  {tag} [3/3] fingerprint browser mode...")
+        # ── 3. Fingerprint Browser mode (CloakBrowser native anti-detect) ──
+        if not email and mode in ("auto", "cloak", "browser"):
+            provider = _fingerprint_provider()
+            print(f"  {tag} [fingerprint browser] 启动指纹浏览器注册流程 ({provider})...")
             try:
                 browser_result = await asyncio.wait_for(
                     _register_one_browser(bb, idx, proxy_str, keep_profile=True),
@@ -3478,7 +3779,7 @@ async def register_one(bb, idx, proxy_str, results, results_lock, live_fh=None, 
             except asyncio.TimeoutError:
                 print(f"  {tag} browser timeout")
             if email:
-                used_mode = "browser"
+                used_mode = provider
 
     except Exception as e:
         print(f"  {tag} FATAL: {e}")
@@ -3564,7 +3865,7 @@ async def main():
     parser.add_argument("--no-proxy", action="store_true", default=False, help="No proxy")
     parser.add_argument("--timeout", "-t", type=int, default=300, help="Per-account timeout (seconds)")
     parser.add_argument("--mode", "-m", type=str, default="auto",
-                        choices=["auto", "protocol", "headless", "browser"],
+                        choices=["auto", "protocol", "headless", "browser", "cloak"],
                         help="auto=protocol→headless→browser fallback; or fix to one mode")
     parser.add_argument("--no-verify", action="store_true",
                         help="Do not verify Outlook login before writing successful accounts")
@@ -3608,7 +3909,7 @@ async def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
-    bb = BitBrowserClient()
+    bb = None if _fingerprint_provider() == "cloak" else BitBrowserClient()
 
     proxy_mode = "noproxy" if args.no_proxy else f"{len(proxy_pool)} unique proxies (cycling for {count} accounts)"
     mode_desc = {
@@ -3616,6 +3917,7 @@ async def main():
         "protocol": "protocol only (pure HTTP, lowest traffic)",
         "headless": "headless only (no BitBrowser, -70% traffic)",
         "browser":  "selected fingerprint browser only (full GUI)",
+        "cloak":    "CloakBrowser native anti-detect Chromium",
     }
     print("=" * 60)
     print("  Outlook Registration - Multi-mode")

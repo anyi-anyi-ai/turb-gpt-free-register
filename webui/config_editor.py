@@ -55,6 +55,10 @@ EDITABLE_FIELDS = [
         "key": "AUTO_PLAN_CHECK_AFTER_REGISTER", "file": "register.py", "type": "bool", "group": "注册方式",
         "label": "注册后自动查套餐", "help": "注册成功后自动入队查询套餐/Plus 资格；关闭后仅保存账号，不自动查套餐",
     },
+    {
+        "key": "SAVE_STORAGE_STATE_ON_REGISTER", "file": "register.py", "type": "bool", "group": "注册方式",
+        "label": "保存浏览器免密登录态", "help": "注册成功后自动导出并保存 Cookies与LocalStorage（StorageState），后续养号或免密打开直进 ChatGPT",
+    },
 
     # ---- CloakBrowser ----
     {
@@ -556,6 +560,34 @@ EDITABLE_FIELDS = [
                 "description": "Roxy 合作伙伴高质量家宽，注册可享 15% 优惠",
             },
         ],
+    },
+    {
+        "key": "DYNAMIC_RESIDENTIAL_ENABLED", "file": "proxy.py", "type": "str", "group": "代理池",
+        "label": "动态住宅IP开关", "help": "false=彻底关闭动态住宅IP，注册直接走本地粘性代理池（额度用尽时选此项）；auto=自动容灾，优先动态住宅，失败自动平滑切回粘性；forced=强制纯动态住宅，提取失败直接报错阻断",
+    },
+    {
+        "key": "DYNAMIC_RESIDENTIAL_API_URL", "file": "proxy.py", "type": "str", "group": "代理池",
+        "label": "动态住宅提取链接", "help": "动态住宅 IP 供应商提供的 API 提取 URL（按次提取单一 IP:Port）",
+    },
+    {
+        "key": "DYNAMIC_RESIDENTIAL_REGIONS", "file": "proxy.py", "type": "str", "group": "代理池",
+        "label": "动态住宅国家配比", "help": "提取国家及权重，例如 JP:7,US:3 表示 70% 日本、30% 美国",
+    },
+    {
+        "key": "DYNAMIC_RESIDENTIAL_MAX_ACCOUNTS_PER_IP", "file": "proxy.py", "type": "int", "group": "代理池",
+        "label": "单住宅IP注册上限", "help": "单个动态住宅出口 IP 允许注册的最大账号数，默认 1",
+    },
+    {
+        "key": "DEFAULT_REGISTER_COUNTRY", "file": "proxy.py", "type": "str", "group": "代理池",
+        "label": "注册首选国家代码", "help": "例如 JP, US, GB, DE 等；留空时按 WebUI 注册任务页的权重滑动条比例分流",
+    },
+    {
+        "key": "STRICT_SAME_COUNTRY_POLICY", "file": "proxy.py", "type": "bool", "group": "代理池",
+        "label": "严格同国策略", "help": "True=账号后续操作（如套餐查询、养号）严格在同国节点池内重选，禁止跨国跳跃；False=允许跨国",
+    },
+    {
+        "key": "MAX_ACCOUNTS_PER_IP", "file": "proxy.py", "type": "int", "group": "代理池",
+        "label": "单粘性IP注册上限", "help": "单个粘性 IP 成功注册达到该数量后，自动轮换至下一 Session 粘性 IP，默认 2",
     },
     {
         "key": "PLAN_CHECK_PROXY_MODE", "file": "proxy.py", "type": "str", "group": "代理池",

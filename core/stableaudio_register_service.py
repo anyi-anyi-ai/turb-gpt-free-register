@@ -62,7 +62,9 @@ class StableAudioRegistrationFlow(BaseRegistrationFlow):
     def execute(self, context: FlowContext) -> RegistrationResult:
         driver = context.driver
         email = context.email
-        password = context.password or context.extra_payload.get("password") or _generate_secure_password()
+        # Auth0 对密码强度有强制性校验（长度>=8，包含大写、小写、数字、特殊符号），
+        # 邮箱池自带的邮箱密码可能较弱，此处统一生成符合 Auth0 标准的高强独立服务密码。
+        password = _generate_secure_password()
         context.password = password
         p = Path(context.db_path or DB_PATH)
 
@@ -102,31 +104,36 @@ class StableAudioRegistrationFlow(BaseRegistrationFlow):
 
             time.sleep(2)
 
-            # 3. 填充并提交注册表单
+            # 3. 填充并提交注册表单（拟人化输入与原生事件触发，规避 Auth0 机械风控拦截）
             logger.info("[3/5] 填充 Auth0 注册表单并提交...")
-            driver.page.evaluate('''(data) => {
-                const emailEl = document.querySelector('input#email') || document.querySelector('input[name="email"]');
-                const passEl = document.querySelector('input#password') || document.querySelector('input[name="password"]');
-                if (emailEl) {
-                    emailEl.focus();
-                    emailEl.value = data.email;
-                    emailEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    emailEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-                if (passEl) {
-                    passEl.focus();
-                    passEl.value = data.password;
-                    passEl.dispatchEvent(new Event('input', { bubbles: true }));
-                    passEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            }''', {"email": email, "password": password})
-            time.sleep(1.5)
+            email_input = driver.page.locator("input#email, input[name='email']").first
+            email_input.wait_for(state="visible", timeout=15000)
+            try:
+                email_input.click(force=True)
+            except Exception:
+                email_input.focus()
+            time.sleep(0.3)
+            # 使用 Playwright 原生逐键输入以触发受控组件真实的按键时序
+            email_el_dom = driver.page.locator("input#email, input[name='email']").first
+            email_el_dom.press_sequentially(email, delay=35)
+            time.sleep(0.5)
 
-            driver.page.evaluate('''() => {
-                const btn = document.querySelector('button[type="submit"]') || 
-                            Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').trim() === 'Continue');
-                if (btn) btn.click();
-            }''')
+            pass_input = driver.page.locator("input#password, input[name='password']").first
+            pass_input.wait_for(state="visible", timeout=15000)
+            try:
+                pass_input.click(force=True)
+            except Exception:
+                pass_input.focus()
+            time.sleep(0.3)
+            pass_input.press_sequentially(password, delay=40)
+            time.sleep(0.8)
+
+            # 模拟鼠标悬停与点击提交
+            submit_btn = driver.page.locator("button[type='submit'][name='action'], button[type='submit']").first
+            submit_btn.wait_for(state="visible", timeout=10000)
+            submit_btn.hover()
+            time.sleep(0.3)
+            submit_btn.click()
 
             # 4. 等待授权回调返回 stableaudio.com
             logger.info("[4/5] 等待 OAuth 授权回调完成...")
@@ -302,7 +309,7 @@ def pick_available_stableaudio_account(
 
 def register_single_stableaudio_account(
     account_info: Dict[str, Any],
-    proxy: str = "http://127.0.0.1:7890",
+    proxy: str = "http://Americas:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
     headless: bool = True,
     db_path: Path | str | None = None,
 ) -> Dict[str, Any]:

@@ -10,3 +10,7 @@ cloakbrowser[geoip]>=0.4.10
 playwright>=1.49.0
 python-dotenv>=1.0.0
 playwright-stealth>=2.0.3
+nodriver
+patchright>=1.63.0
+faster-whisper
+av<14

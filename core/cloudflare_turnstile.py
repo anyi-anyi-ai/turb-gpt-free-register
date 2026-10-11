@@ -64,10 +64,22 @@ def is_cloudflare_challenge(driver: Any) -> bool:
                 'attention required', 'please wait', 'moment...', '確認中', '確認しています',
                 'しばらくお待ちください', 'pieni hetki', '잠시만', 'wacht even',
                 'poczekaj', 'подождите', 'attendez', 'espera un momento',
-                'verifying you are human', 'cloudflare', 'ddos-guard'
+                'verifying you are human', 'cloudflare', 'ddos-guard', 'セキュリティ検証'
             ];
             if (cfTitles.some(t => title.includes(t))) {
                 return { isChallenge: true, reason: 'title_challenge' };
+            }
+
+            // 页面正文多语言 Cloudflare / Turnstile 签名（覆盖日/中/英等）
+            const bodyText = (document.body?.innerText || '').toLowerCase();
+            const cfTextSignatures = [
+                'セキュリティ検証の実行', 'セキュリティ サービスを使用しています',
+                'ray id:', 'cloudflare によるパフォーマンス', 'performance & security by cloudflare',
+                'checking if the site connection is secure', 'verifying you are human',
+                '正在验证您是否是真人', '正在检查站点连接的安全性', 'enable javascript and cookies'
+            ];
+            if (cfTextSignatures.some(s => bodyText.includes(s.toLowerCase()))) {
+                return { isChallenge: true, reason: 'body_challenge_text' };
             }
         } catch (e) {}
         return { isChallenge: false, reason: 'default_no_challenge' };
@@ -98,7 +110,7 @@ def is_cloudflare_challenge(driver: Any) -> bool:
         "attention required", "please wait", "moment...", "確認中", "確認しています",
         "しばらくお待ちください", "pieni hetki", "잠시만", "wacht even",
         "poczekaj", "подождите", "attendez", "espera un momento",
-        "verifying you are human", "cloudflare", "ddos-guard",
+        "verifying you are human", "cloudflare", "ddos-guard", "セキュリティ検証",
     )
     if any(sig in lower_title for sig in cf_title_signatures):
         return True
@@ -111,6 +123,23 @@ def is_cloudflare_challenge(driver: Any) -> bool:
 
     if any(sig in url for sig in ("__cf_chl_rt_tk=", "__cf_chl_tk=", "__cf_chl_f_tk=", "/cdn-cgi/challenge-platform/")):
         return True
+
+    # 4. 页面正文特征兜底
+    try:
+        body_snippet = ""
+        if hasattr(driver, "page") and hasattr(driver.page, "inner_text"):
+            body_snippet = str(driver.page.inner_text("body", timeout=1500) or "")[:2000]
+        elif hasattr(driver, "execute_script"):
+            body_snippet = str(driver.execute_script("return (document.body?.innerText || '').slice(0, 2000);") or "")
+        lower_body = body_snippet.lower()
+        if any(sig in lower_body for sig in (
+            "セキュリティ検証の実行", "ray id:", "performance & security by cloudflare",
+            "cloudflare によるパフォーマンス", "checking if the site connection is secure",
+            "正在验证您是否是真人", "verifying you are human"
+        )):
+            return True
+    except Exception:
+        pass
 
     return False
 
@@ -197,22 +226,26 @@ def try_click_turnstile_cross_origin(driver: Any) -> bool:
             page = driver.page
             for frame in page.frames:
                 f_url = str(getattr(frame, "url", "") or "")
-                if "challenges.cloudflare.com" in f_url or "challenge-platform" in f_url:
+                if any(k in f_url for k in ("challenges.cloudflare.com", "challenge-platform", "turnstile")):
                     for selector in (
                         "input[type='checkbox']",
-                        "#challenge-stage",
-                        ".ctp-checkbox-label",
                         "label.ctp-checkbox-label",
+                        ".ctp-checkbox-label",
                         "span.mark",
+                        "#challenge-stage",
                         "#cf-stage",
+                        "body",
                     ):
-                        loc = frame.locator(selector)
-                        if loc.count() > 0 and loc.first.is_visible():
-                            logger.info("%s 找到 Turnstile iframe 元素：%s，准备穿透模拟点击", prefix, selector)
-                            time.sleep(random.uniform(0.4, 0.8))
-                            loc.first.click()
-                            time.sleep(random.uniform(0.6, 1.2))
-                            return True
+                        try:
+                            loc = frame.locator(selector)
+                            if loc.count() > 0:
+                                logger.info("%s 找到 Turnstile iframe 元素：%s，执行模拟穿透点击", prefix, selector)
+                                time.sleep(random.uniform(0.3, 0.6))
+                                loc.first.click(force=True, timeout=2500)
+                                time.sleep(random.uniform(0.6, 1.2))
+                                return True
+                        except Exception:
+                            continue
         except Exception as exc:
             logger.debug("%s Playwright Frame 穿透点击失败: %s", prefix, exc)
 
@@ -325,6 +358,20 @@ def solve_or_wait_cloudflare_turnstile(
     if not is_cloudflare_challenge(driver):
         return True
 
+    # 触发人机验证质询，记录 Strike（超限自动隔离黑名单）
+    try:
+        from core.ip_quota_manager import ip_quota_manager
+        prx = getattr(driver, "_proxy_url", None)
+        country = getattr(driver, "_proxy_country", None)
+        if prx:
+            ip_quota_manager.record_captcha_strike(
+                proxy_url=prx,
+                reason="Cloudflare Challenge / Turnstile",
+                country=country
+            )
+    except Exception as exc:
+        logger.debug("%s 记录人机验证打击异常: %s", prefix, exc)
+
     logger.warning("%s 检测到页面处于 Cloudflare 质询盾（Just a moment...），启动自动清障与过盾流程", prefix)
 
     # 2. 阶段一：自动穿透点击尝试 (max_auto_clicks 次，静默无头清障)
@@ -370,13 +417,14 @@ def solve_or_wait_cloudflare_turnstile(
 
     deadline = time.time() + timeout
     last_log_time = 0.0
+    last_click_time = 0.0
 
     while time.time() < deadline:
         if check_stop_cb:
             check_stop_cb()
 
         if not is_cloudflare_challenge(current_driver):
-            logger.info("%s [人工接管] 验证通过！页面已成功脱离 Cloudflare 盾，继续自动化注册流程！", prefix)
+            logger.info("%s [人机验证通过] 页面已成功脱离 Cloudflare 盾，继续自动化注册流程！", prefix)
             return True
 
         remaining = int(math.ceil(deadline - time.time()))
@@ -384,17 +432,22 @@ def solve_or_wait_cloudflare_turnstile(
         # 每隔 5 秒打印一次倒计时提示，保持日志清晰
         if now - last_log_time >= 5.0:
             if not is_headless:
-                logger.info("%s [等待人工勾选] 请在弹出的浏览器中点击通过验证，剩余等待时间：%d 秒...", prefix, remaining)
+                logger.info("%s [人机验证中] 自动穿透重试中（也可手动点击），剩余等待时间：%d 秒...", prefix, remaining)
                 bring_browser_window_to_front(current_driver)
             else:
                 logger.info("%s [等待页面放行] 页面仍在质询中，剩余等待时间：%d 秒...", prefix, remaining)
             last_log_time = now
 
-        # 等待期间偶发重试一次穿透点击（有时 Turnstile iframe 加载慢）
-        if int(now) % 6 == 0:
-            try_click_turnstile_cross_origin(current_driver)
+        # 每隔 2.5 秒尝试一次穿透点击（解决 iframe 延迟挂载或点击未注册问题）
+        if now - last_click_time >= 2.5:
+            last_click_time = now
+            if try_click_turnstile_cross_origin(current_driver):
+                time.sleep(1.0)
+                if not is_cloudflare_challenge(current_driver):
+                    logger.info("%s 自动穿透点击成功放行！", prefix)
+                    return True
 
-        time.sleep(1.5)
+        time.sleep(1.0)
 
     logger.error("%s Cloudflare 人机验证等待超时（%d 秒），未能成功通过盾，即将放弃本账号并继续下一个", prefix, timeout)
     return False

@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -19,6 +20,7 @@ from email import policy
 from email.header import decode_header
 from email.parser import BytesParser
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -196,6 +198,32 @@ def _generate_local(length: int | None = None) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(n))
 
 
+def _get_proxies() -> dict[str, str] | None:
+    explicit = _cfg_str("CLOUDFLARE_PROXY")
+    if explicit:
+        return {"http": explicit, "https": explicit}
+    import os
+    env_p = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or os.environ.get("all_proxy")
+    if env_p:
+        return {"http": env_p, "https": env_p}
+    try:
+        from config import proxy as _pxy_cfg
+        plan_p = getattr(_pxy_cfg, "PLAN_CHECK_PROXY", "")
+        if plan_p and plan_p.startswith("http"):
+            return {"http": plan_p, "https": plan_p}
+    except Exception:
+        pass
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.3)
+            if s.connect_ex(("127.0.0.1", 7890)) == 0:
+                return {"http": "http://127.0.0.1:7890", "https": "http://127.0.0.1:7890"}
+    except Exception:
+        pass
+    return None
+
+
 def _request(
     method: str,
     path: str,
@@ -208,6 +236,7 @@ def _request(
     url = _base_url() + _normalize_path(path, path or "/")
     headers = _build_headers(content_type=content_type or json_body is not None, bearer_jwt=bearer_jwt)
     query = _auth_params(params)
+    proxies = _get_proxies()
     max_retries = 2
     for attempt in range(max_retries + 1):
         try:
@@ -217,6 +246,7 @@ def _request(
                 headers=headers,
                 json=json_body,
                 params=query or None,
+                proxies=proxies,
                 timeout=_timeout(),
             )
             break
@@ -325,19 +355,64 @@ def create_address(domain: str | None = None) -> CFTempMailAccount:
     return account
 
 
+_SESSION_FILE = Path("data/cf_temp_mail_sessions.json")
+
+
+def _save_sessions() -> None:
+    try:
+        _SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            k: {
+                "email": v.email,
+                "jwt": v.jwt,
+                "domain": v.domain,
+                "created_at": v.created_at,
+            }
+            for k, v in _CONTEXT_CACHE.items()
+        }
+        _SESSION_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.debug("[Cloudflare] 保存会话缓存失败: %s", exc)
+
+
+def _load_sessions() -> None:
+    try:
+        if _SESSION_FILE.exists():
+            raw_text = _SESSION_FILE.read_text(encoding="utf-8").strip()
+            if raw_text:
+                data = json.loads(raw_text)
+                for k, v in data.items():
+                    if k not in _CONTEXT_CACHE and isinstance(v, dict) and "email" in v and "jwt" in v:
+                        _CONTEXT_CACHE[k] = CFTempMailAccount(
+                            email=v["email"],
+                            jwt=v["jwt"],
+                            domain=v.get("domain", ""),
+                            created_at=float(v.get("created_at", 0.0)),
+                        )
+    except Exception as exc:
+        logger.debug("[Cloudflare] 读取会话缓存失败: %s", exc)
+
+
 def pick_account() -> CFTempMailAccount:
     """创建并缓存一个 Cloudflare 临时邮箱。"""
     account = create_address()
     _CONTEXT_CACHE[_cache_key(account.email)] = account
+    _save_sessions()
     return account
 
 
 def get_account_context(email: str) -> CFTempMailAccount | None:
-    return _CONTEXT_CACHE.get(_cache_key(email))
+    key = _cache_key(email)
+    res = _CONTEXT_CACHE.get(key)
+    if res is None:
+        _load_sessions()
+        res = _CONTEXT_CACHE.get(key)
+    return res
 
 
 def release_account(email: str, status: str = "available", note: str | None = None) -> None:
     _CONTEXT_CACHE.pop(_cache_key(email), None)
+    _save_sessions()
     logger.info(
         "[Cloudflare] 已释放临时邮箱: %s（status=%s, note=%s）",
         email,

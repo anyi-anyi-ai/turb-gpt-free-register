@@ -15,7 +15,7 @@ _GROK_SENDER_HINTS = ("x.ai", "xai", "grok")
 # 多语言关键字（用于判断是否是 OpenAI / Grok 验证码邮件）
 _OPENAI_KEYWORDS = (
     "chatgpt", "openai", "grok", "x.ai", "xai", "spacexai", "spacex",
-    "suno", "clerk",
+    "suno", "clerk", "runninghub", "running hub",
     # UNED / 西班牙文
     "uned", "código", "codigo", "verificación", "verificacion", "validar",
     # 英文

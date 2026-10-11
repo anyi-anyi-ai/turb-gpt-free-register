@@ -62,7 +62,7 @@ SEND_CLIENT_HINTS = True
 SEND_HIGH_ENTROPY_CLIENT_HINTS = False
 
 # ---------- 语言 / 时区 ----------
-BROWSER_LOCALE_PROFILE = "jp"
+BROWSER_LOCALE_PROFILE = "us"
 AUTO_BROWSER_LOCALE_FROM_IP = True
 IP_GEO_TIMEOUT = 6.0
 IP_GEO_ENDPOINTS = [
@@ -82,22 +82,19 @@ CLOUD_PROXY_ORG_KEYWORDS = [
 ]
 
 # ---------- Roxy/Cloak 浏览器省流量模式 ----------
-# 默认关闭。开启后只拦截可选的图片/媒体，以及下面明确列出的统计/第三方 URL；
-# 不拦截登录所需的 document、核心 script、stylesheet、xhr/fetch、websocket；
+# 默认开启。开启后拦截可选的图片/音视频/字体，以及下面明确列出的统计/第三方 URL；
+# 严格不拦截登录所需的 document、核心 script、stylesheet、xhr/fetch、websocket；
 # Playwright 会放行带验证码/challenge 关键词的 URL。
-# 该模式仅应用于 Roxy/Cloak，本地浏览器才需要节省带宽；Browser Use/Skyvern 云端
-# 浏览器不会安装省流量拦截器。Selenium/CDP 只能按 URL 后缀拦截，若验证码异常可关闭。
-BROWSER_DATA_SAVER_MODE: bool = False
-# 每行一个 Playwright resource_type。可选 image/media/font/manifest/texttrack 等；
-# 默认只拦截 image、media；也可配置 stylesheet/font 等资源；Roxy 还会通过 Chromium 启动参数关闭图片加载，
-# 遇到页面布局或验证码异常时可关闭模式。
-BROWSER_DATA_SAVER_BLOCKED_RESOURCE_TYPES: list[str] = ["image", "media"]
-# URL glob 级别的额外拦截。以下是资源明细中确认不参与邮箱密码注册主流程的
-# RUM/广告统计资源；Google GSI 仅用于 Google 登录，不使用 Google 登录时默认拦截。
-# 不要把 ChatGPT/auth.openai 的 CDN chunk 当作候选：即使某个 chunk 只有少量函数
-# 被调用，也可能负责路由、表单切换或懒加载；需经过单变量 A/B 验证后才能加入规则。
-# 不要把 chatgpt/openai 的核心 API 或 sentinel URL 加到这里。
-# `**` 用于匹配 URL 中的任意路径；Roxy/Cloak 的 Playwright/Selenium 会读取这组规则。
+BROWSER_DATA_SAVER_MODE: bool = True
+# 每行一个 Playwright resource_type。拦截图片、音视频、字体与清单：
+BROWSER_DATA_SAVER_BLOCKED_RESOURCE_TYPES: list[str] = [
+    "image",
+    "media",
+    "font",
+    "manifest",
+    "texttrack",
+]
+# URL glob 级别的额外拦截。阻断不参与核心认证的高频监控与第三方 RUM 资源：
 BROWSER_DATA_SAVER_BLOCKED_URL_PATTERNS: list[str] = [
     "**://auth.openai.com/awe/api/v2/rum**",
     "**://chatgpt.com/ces/statsc/flush**",
@@ -106,7 +103,17 @@ BROWSER_DATA_SAVER_BLOCKED_URL_PATTERNS: list[str] = [
     "**://snap.licdn.com/**",
     "**://bat.bing.com/**",
     "**://accounts.google.com/gsi/client**",
+    "**datadoghq.com**",
+    "**statsigapi.net**",
+    "**sentry.io**",
+    "**launchdarkly.com**",
 ]
+
+# ---------- 区域共享静态资源磁盘缓存 ----------
+# 相同大洲/国家的账号复用本地已下载的前端静态 JS/CSS 响应体，大幅削减重复下载流量；
+# 用户数据（Cookies、LocalStorage、Session）仍在各账号独立 Profile 中，严格物理隔离。
+BROWSER_SHARED_CACHE_ENABLED: bool = True
+BROWSER_SHARED_CACHE_ROOT: str = "data/browser_cache"
 
 # ---------- Roxy/Cloak 浏览器流量明细日志 ----------
 # 默认关闭；开启后在每次注册结束时按单请求总字节降序输出资源 URL、类型、状态和大小。
@@ -403,4 +410,4 @@ def validate_browser_profile(profile: dict) -> list[str]:
     return issues
 
 # ---- .env overrides for WebUI editable fields ----
-apply_env_overrides(globals(), {'BROWSER_LOCALE_PROFILE': 'str', 'AUTO_BROWSER_LOCALE_FROM_IP': 'bool', 'IP_GEO_TIMEOUT': 'float', 'REJECT_CLOUD_PROXY': 'bool', 'BROWSER_DATA_SAVER_MODE': 'bool', 'BROWSER_DATA_SAVER_BLOCKED_RESOURCE_TYPES': 'list_str_multiline', 'BROWSER_DATA_SAVER_BLOCKED_URL_PATTERNS': 'list_str_multiline', 'BROWSER_TRAFFIC_DETAIL_LOG': 'bool', 'BROWSER_TRAFFIC_DETAIL_MAX_ENTRIES': 'int', 'BROWSER_JS_COVERAGE_LOG': 'bool', 'BROWSER_JS_COVERAGE_MAX_ENTRIES': 'int'})
+apply_env_overrides(globals(), {'BROWSER_LOCALE_PROFILE': 'str', 'AUTO_BROWSER_LOCALE_FROM_IP': 'bool', 'IP_GEO_TIMEOUT': 'float', 'REJECT_CLOUD_PROXY': 'bool', 'BROWSER_DATA_SAVER_MODE': 'bool', 'BROWSER_DATA_SAVER_BLOCKED_RESOURCE_TYPES': 'list_str_multiline', 'BROWSER_DATA_SAVER_BLOCKED_URL_PATTERNS': 'list_str_multiline', 'BROWSER_SHARED_CACHE_ENABLED': 'bool', 'BROWSER_SHARED_CACHE_ROOT': 'str', 'BROWSER_TRAFFIC_DETAIL_LOG': 'bool', 'BROWSER_TRAFFIC_DETAIL_MAX_ENTRIES': 'int', 'BROWSER_JS_COVERAGE_LOG': 'bool', 'BROWSER_JS_COVERAGE_MAX_ENTRIES': 'int'})

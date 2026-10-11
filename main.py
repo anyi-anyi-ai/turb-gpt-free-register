@@ -577,7 +577,9 @@ def run_registration(
         #   2. 创建接口通过后失败：远端已消耗这个邮箱，直接废弃，避免重复注册。
         #   3. 创建接口通过前的普通失败：邮箱还可以下次继续尝试，放回 available。
         from core.openai_auth import AccountUnusableError
+        from core.auth_flow import AlreadyRegisteredError, UserAlreadyExistsError
         account_dead = isinstance(e, AccountUnusableError)
+        already_registered = isinstance(e, (AlreadyRegisteredError, UserAlreadyExistsError)) or "user_already_exists" in str(e).lower()
         try:
             if email:
                 from core.email_provider import release_email
@@ -587,6 +589,12 @@ def run_registration(
                         note=f"账号已废弃，邮箱不可用: {str(e)[:180]}",
                     )
                     logger.warning(f"[邮箱:{src}] {email} 账号已废弃，标记为 failed，不再重新注册")
+                elif already_registered:
+                    src = release_email(
+                        email, status="disabled",
+                        note=f"已在GPT注册过: {str(e)[:180]}",
+                    )
+                    logger.warning(f"[邮箱:{src}] {email} 检测到已存在GPT账号，标记为 disabled，不再重新注册")
                 elif create_acknowledged:
                     src = release_email(
                         email, status="failed",

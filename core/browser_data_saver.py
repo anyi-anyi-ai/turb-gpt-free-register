@@ -76,6 +76,17 @@ _CHALLENGE_KEYWORDS = (
     "verification", "verify",
 )
 
+# 核心认证与渲染资源白名单：OpenAI Next.js chunk、Auth0、Cloudflare 等核心资源绝不拦截
+_CORE_AUTH_DOMAINS = (
+    "oaistatic.com",
+    "auth.openai.com",
+    "chatgpt.com",
+    "openai.com",
+    "auth0.com",
+    "challenges.cloudflare.com",
+    "cloudflare.com",
+)
+
 
 def _as_items(value: Any, *, lower: bool = True) -> list[str]:
     if value is None:
@@ -173,6 +184,11 @@ class BrowserDataSaver:
         # 验证挑战资源优先放行；普通页面图片/媒体仍然拦截。
         if _is_challenge_url(url):
             return False
+        # 核心认证脚本、文档与数据接口绝对放行，防止 Next.js SPA 挂起或白屏
+        lower_url = str(url or "").lower()
+        if any(domain in lower_url for domain in _CORE_AUTH_DOMAINS):
+            if resource_type in ("script", "xhr", "fetch", "document", "stylesheet", "other"):
+                return False
         return True
 
     def _record_blocked(

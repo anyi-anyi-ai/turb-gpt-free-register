@@ -14,7 +14,7 @@ CLOAK_HUMAN_TAKEOVER_TIMEOUT: int = 30
 # 是否启用 CloakBrowser humanize 行为。
 CLOAK_HUMANIZE: bool = True
 
-# 使用当前出口 IP 自动匹配时区/语言/WebRTC IP。
+# 使用当前出口 IP 自动匹配时区/语言/WebRTC IP (由 cloakbrowser_driver 统一前置推断，防止时区错配触发 CF 盾)。
 CLOAK_GEOIP: bool = True
 
 # 显式指定 Cloak 语言/时区；留空则在 CLOAK_GEOIP=True 时按出口 IP 自动推断。
@@ -28,7 +28,7 @@ CLOAK_USE_PROXY: bool = True
 # Pro license；留空则使用免费 binary。
 CLOAK_LICENSE_KEY: str = ""
 
-# 固定指纹 seed；留空则每次 launch 随机生成新指纹。
+# 全局固定指纹 seed；留空（推荐）自动启用「一号一专属确定性指纹隔离」；填值则强制使用该全局 seed（单次调试）。
 CLOAK_FINGERPRINT_SEED: str = ""
 
 # 持久化用户目录；留空则临时上下文。若要固定账号画像/缓存，可填如 "./cloak-profiles/default"。
@@ -42,6 +42,9 @@ CLOAK_SELENIUM_TIMEOUT: int = 90
 
 # 调试时保留浏览器不自动关闭。
 CLOAK_KEEP_BROWSER_OPEN: bool = False
+
+# 当注册检测到账号已存在 (user_already_exists) 时，是否尝试自动切换到登录流（通过 OTP/一次性验证码登录挽救并入库账号）
+CLOAK_LOGIN_FALLBACK_ON_EXISTING: bool = True
 
 # ---- .env overrides for WebUI editable fields ----
 apply_env_overrides(globals(), {
@@ -58,4 +61,5 @@ apply_env_overrides(globals(), {
     'CLOAK_USER_DATA_DIR': 'str',
     'CLOAK_SELENIUM_TIMEOUT': 'int',
     'CLOAK_KEEP_BROWSER_OPEN': 'bool',
+    'CLOAK_LOGIN_FALLBACK_ON_EXISTING': 'bool',
 })

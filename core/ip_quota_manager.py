@@ -38,6 +38,7 @@ class IPQuotaManager:
         self._state = {
             "proxy_counts": {},       # {normalized_proxy_url: {"count": int, "country": str, "last_used": str, "last_email": str}}
             "country_sessions": {},   # {country_code: int} 当前活跃的会话序号，从 1 开始
+            "captcha_strikes": {},    # {proxy_key: {"strikes": int, "blacklisted": bool, "last_strike": str, "reasons": list}}
         }
         self._in_flight: dict[str, int] = {}
         self._country_rr_idx: int = 0
@@ -65,10 +66,12 @@ class IPQuotaManager:
                     if isinstance(loaded, dict):
                         self._state["proxy_counts"] = loaded.get("proxy_counts") or {}
                         self._state["country_sessions"] = loaded.get("country_sessions") or {}
+                        self._state["captcha_strikes"] = loaded.get("captcha_strikes") or {}
                         logger.info(
-                            "[IP配额] 成功加载历史配额状态：已跟踪 %d 个代理/会话，%d 个国家会话游标",
+                            "[IP配额] 成功加载历史配额状态：已跟踪 %d 个代理/会话，%d 个国家会话游标，%d 个验证码记录",
                             len(self._state["proxy_counts"]),
                             len(self._state["country_sessions"]),
+                            len(self._state["captcha_strikes"]),
                         )
                         return
         except Exception as exc:
@@ -105,21 +108,139 @@ class IPQuotaManager:
         is_token = bool(p.password and "resin_proxy" in p.password)
         return is_port or is_token
 
+    def is_proxy_port_open(self, proxy_url: str, timeout: float = 0.5) -> bool:
+        """快速探测代理宿主端口是否连通，实现本地与云端节点离线自动过滤。"""
+        if not proxy_url:
+            return False
+        try:
+            import socket
+            p = urlsplit(proxy_url)
+            host = p.hostname or "127.0.0.1"
+            port = p.port or (1080 if "socks" in (p.scheme or "") else 80)
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except Exception:
+            return False
+
     def _build_resin_session_url(self, base_proxy_url: str, country: str, session_idx: int) -> str:
         """构建 Resin 带 Session 的代理入口 URL。"""
         p = urlsplit(base_proxy_url)
-        c_code = country.strip().upper()
-        session_user = f"{c_code}.sess_{session_idx}"
+        channel = (p.username or "").split(".")[0].strip() or country.strip().upper()
+        session_user = f"{channel}.sess_{session_idx}"
         pwd = p.password or ""
         host = p.hostname or "127.0.0.1"
         port = p.port or 2260
         netloc = f"{session_user}:{pwd}@{host}:{port}" if pwd else f"{session_user}@{host}:{port}"
         return urlunsplit((p.scheme or "http", netloc, p.path, p.query, p.fragment))
 
-    def get_registration_proxy(self, country: str | None = None) -> str:
-        """为新的注册流程挑选一个尚未达到配额上限的代理/会话。
+    def is_proxy_blacklisted(self, proxy_url: str | None, egress_ip: str | None = None) -> bool:
+        """检查代理 URL、会话或出口 IP 是否已被列入验证码黑名单。"""
+        if not proxy_url and not egress_ip:
+            return False
+        self._ensure_loaded()
+        with self._lock:
+            strikes_map = self._state.get("captcha_strikes", {})
+            if proxy_url:
+                norm = _normalize_proxy_url(proxy_url)
+                if strikes_map.get(norm, {}).get("blacklisted"):
+                    return True
+                p = urlsplit(proxy_url)
+                user = (p.username or "").strip()
+                if user and strikes_map.get(user, {}).get("blacklisted"):
+                    return True
+            if egress_ip:
+                ip_str = str(egress_ip).strip()
+                if strikes_map.get(ip_str, {}).get("blacklisted"):
+                    return True
+        return False
+
+    def record_captcha_strike(
+        self,
+        proxy_url: str | None,
+        egress_ip: str | None = None,
+        reason: str = "Cloudflare Turnstile",
+        country: str | None = None,
+    ) -> int:
+        """当代理在注册流程中遭遇 Cloudflare Turnstile / 5 秒盾时调用。
         
-        若当前出口 IP 已成功注册达到 MAX_ACCOUNTS_PER_IP，自动轮换到下一个 IP/会话。
+        累计 strike 达到 2 次时，自动将该会话/IP 列入永久黑名单并步进 Resin 会话游标。
+        """
+        if not proxy_url and not egress_ip:
+            return 0
+        self._ensure_loaded()
+        with self._lock:
+            if "captcha_strikes" not in self._state:
+                self._state["captcha_strikes"] = {}
+
+            keys_to_update = []
+            inferred_country = country
+            current_sess_idx = None
+
+            if proxy_url:
+                norm = _normalize_proxy_url(proxy_url)
+                keys_to_update.append(norm)
+                p = urlsplit(proxy_url)
+                user = (p.username or "").strip()
+                if user:
+                    keys_to_update.append(user)
+                    if "." in user:
+                        c_part, s_part = user.split(".", 1)
+                        if not inferred_country:
+                            inferred_country = c_part.upper()
+                        if s_part.startswith("sess_"):
+                            try:
+                                current_sess_idx = int(s_part[5:])
+                            except Exception:
+                                pass
+            if egress_ip:
+                keys_to_update.append(str(egress_ip).strip())
+
+            max_strike = 0
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            for k in set(keys_to_update):
+                entry = self._state["captcha_strikes"].get(k) or {
+                    "strikes": 0,
+                    "blacklisted": False,
+                    "first_strike": now_str,
+                    "last_strike": now_str,
+                    "reasons": []
+                }
+                entry["strikes"] = int(entry.get("strikes", 0)) + 1
+                entry["last_strike"] = now_str
+                entry["reasons"] = (entry.get("reasons", []) + [reason])[-10:]
+
+                if entry["strikes"] >= 2:
+                    entry["blacklisted"] = True
+                    logger.warning(
+                        "[IP黑名单] ⚠️ 代理/会话 [%s] 人机验证质询累计达到 %d 次，已正式触发黑名单隔离！",
+                        k, entry["strikes"],
+                    )
+
+                self._state["captcha_strikes"][k] = entry
+                max_strike = max(max_strike, entry["strikes"])
+
+            # 若该会话达到黑名单且属于 Resin 代理，强制立即步进国家会话游标
+            if max_strike >= 2 and inferred_country:
+                c_code = inferred_country.strip().upper()
+                prev_idx = int(self._state["country_sessions"].get(c_code, 1))
+                if current_sess_idx is not None and current_sess_idx >= prev_idx:
+                    new_idx = current_sess_idx + 1
+                else:
+                    new_idx = prev_idx + 1
+                self._state["country_sessions"][c_code] = new_idx
+                logger.warning(
+                    "[IP黑名单] 国家 %s 会话因黑名单隔离已自动从 sess_%s 步进至 sess_%d，避免后续注册踩坑",
+                    c_code, current_sess_idx if current_sess_idx is not None else prev_idx, new_idx,
+                )
+
+            self._save_to_storage()
+            return max_strike
+
+    def get_registration_proxy(self, country: str | None = None) -> str:
+        """为新的注册流程挑选一个尚未达到配额上限且未被黑名单隔离的代理/会话。
+        
+        若当前出口 IP 已成功注册达到 MAX_ACCOUNTS_PER_IP 或被黑名单隔离，自动轮换到下一个 IP/会话。
         """
         self._ensure_loaded()
         with self._lock:
@@ -151,7 +272,9 @@ class IPQuotaManager:
 
             # 2. 如果对应国家配置了代理池
             if target_country and proxies_in_country and isinstance(proxies_in_country, (list, tuple)):
-                first_proxy = str(proxies_in_country[0]).strip()
+                alive_proxies = [p for p in proxies_in_country if self.is_proxy_port_open(str(p).strip())]
+                effective_proxies = alive_proxies if alive_proxies else list(proxies_in_country)
+                first_proxy = str(effective_proxies[0]).strip()
 
                 # 分支 A：Resin 聚合网关代理（支持动态 Country.Session 切换全新独立出口 IP）
                 if self.is_resin_proxy(first_proxy):
@@ -159,16 +282,29 @@ class IPQuotaManager:
                     while True:
                         candidate_url = self._build_resin_session_url(first_proxy, target_country, current_idx)
                         norm = _normalize_proxy_url(candidate_url)
+
+                        # 检查黑名单隔离
+                        if self.is_proxy_blacklisted(candidate_url):
+                            logger.warning(
+                                "[IP黑名单] 国家 %s 的会话 sess_%d (URL: %s) 处于验证码黑名单中，自动跳过并步进至 sess_%d",
+                                target_country, current_idx, norm.split("@")[-1] if "@" in norm else norm, current_idx + 1,
+                            )
+                            current_idx += 1
+                            self._state["country_sessions"][target_country] = current_idx
+                            self._save_to_storage()
+                            continue
+
                         used_count = self._state["proxy_counts"].get(norm, {}).get("count", 0)
                         in_flight = self._in_flight.get(norm, 0)
                         active_count = used_count + in_flight
                         if active_count < limit:
-                            self._state["country_sessions"][target_country] = current_idx
+                            self._state["country_sessions"][target_country] = current_idx + 1
                             self._in_flight[norm] = in_flight + 1
+                            self._save_to_storage()
                             logger.info(
-                                "[IP配额] 锁定国家 %s 会话 sess_%d 入口 [%s] (已完成 %d, 在途 %d, 配额 %d)",
+                                "[IP配额] 锁定国家 %s 会话 sess_%d 入口 [%s] (已完成 %d, 在途 %d, 配额 %d)，下次将轮换至 sess_%d",
                                 target_country, current_idx, norm.split("@")[-1] if "@" in norm else norm,
-                                used_count, in_flight + 1, limit,
+                                used_count, in_flight + 1, limit, current_idx + 1,
                             )
                             return candidate_url
                         # 已达上限或正在并发使用中，步进到下一个 Session
@@ -183,7 +319,9 @@ class IPQuotaManager:
                 # 分支 B：常规静态多节点代理列表
                 else:
                     candidates = []
-                    for prx in proxies_in_country:
+                    for prx in effective_proxies:
+                        if self.is_proxy_blacklisted(prx):
+                            continue
                         norm = _normalize_proxy_url(prx)
                         used_count = self._state["proxy_counts"].get(norm, {}).get("count", 0)
                         in_flight = self._in_flight.get(norm, 0)
@@ -196,13 +334,14 @@ class IPQuotaManager:
                             return raw_prx
 
                     # 若全部节点都已用满，记录警告并选择已用次数最少的节点兜底
-                    candidates.sort(key=lambda x: x[0])
-                    least_used = candidates[0][4]
-                    logger.warning(
-                        "[IP配额] 国家 %s 代理池中所有 %d 个节点均已达到单 IP 最大注册次数 (%d 次)！兜底复用节点：%s",
-                        target_country, len(proxies_in_country), limit, least_used,
-                    )
-                    return least_used
+                    if candidates:
+                        candidates.sort(key=lambda x: x[0])
+                        least_used = candidates[0][4]
+                        logger.warning(
+                            "[IP配额] 国家 %s 代理池中所有可用节点均已达注册上限 (%d 次)！兜底复用节点：%s",
+                            target_country, limit, least_used,
+                        )
+                        return least_used
 
             # 3. 兜底逻辑：常规 pick_proxy
             return proxy_cfg.pick_proxy(country=target_country)
@@ -226,6 +365,12 @@ class IPQuotaManager:
         """当代理遇到网络隧道断开、超时或死节点时调用，立即轮换坏会话并释放在途槽位。"""
         if not proxy_url:
             return
+        try:
+            from core.dynamic_residential_proxy import dynamic_residential_manager
+            if dynamic_residential_manager.enabled:
+                dynamic_residential_manager.record_proxy_failure(reason=reason)
+        except Exception:
+            pass
         self._ensure_loaded()
         norm = _normalize_proxy_url(proxy_url)
         with self._lock:
@@ -278,6 +423,12 @@ class IPQuotaManager:
         """当一个账号通过该代理成功注册并保存时调用此函数，累加配额计数并释放在途槽位。"""
         if not proxy_url:
             return 0
+        try:
+            from core.dynamic_residential_proxy import dynamic_residential_manager
+            if dynamic_residential_manager.enabled:
+                dynamic_residential_manager.record_account_success(email=email)
+        except Exception:
+            pass
         self._ensure_loaded()
         norm = _normalize_proxy_url(proxy_url)
         with self._lock:

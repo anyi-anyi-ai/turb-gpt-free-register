@@ -625,6 +625,9 @@ def create_account(session: BrowserSession, name: str, birthday: str, sentinel_h
     if resp.status_code != 200:
         logger.error(f"[步骤12] 请求失败, 状态码: {resp.status_code}")
         logger.error(f"[步骤12] 响应内容: {resp.text}")
+        if "user_already_exists" in resp.text.lower() or "account already exists" in resp.text.lower():
+            from core.auth_flow.stages import UserAlreadyExistsError
+            raise UserAlreadyExistsError(f"OpenAI返回账号已存在: {resp.text}")
         resp.raise_for_status()
 
     data = resp.json()

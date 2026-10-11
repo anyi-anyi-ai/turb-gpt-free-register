@@ -279,10 +279,52 @@ def _append_batch_archive(
     extra: dict,
     batch_dir: Path | None,
 ) -> None:
-    """兼容旧调用方；注册账号已经由 db.insert_account 保存到 SQLite。"""
-    from core import db
-    # 参数保留是为了兼容注册驱动；不再读取 batch_dir 或写入任何归档文件。
-    _ = (db, row_id, email, access_token, totp_secret, email_source, proxy_used, extra, batch_dir)
+    """多级双写容灾归档：同时在 SQLite 与磁盘 tokens 目录落盘，确保永不丢库并支持后续出图免密。"""
+    try:
+        tokens_dir = Path("tokens")
+        tokens_dir.mkdir(parents=True, exist_ok=True)
+        indiv_dir = tokens_dir / "individual"
+        indiv_dir.mkdir(parents=True, exist_ok=True)
+
+        pwd = str(extra.get("registration_password") or extra.get("password") or "").strip()
+        copy_line = f"{email}----{pwd}----{access_token}----{totp_secret or ''}"
+        
+        # 1. 追加到标准 txt 文本
+        txt_path = tokens_dir / "chatgpt_accounts.txt"
+        with txt_path.open("a", encoding="utf-8") as f:
+            f.write(f"{copy_line}\n")
+
+        # 2. 单账号独立 JSON 凭证
+        safe_name = "".join(c if c.isalnum() or c in ".-_@" else "_" for c in email.lower())
+        account_data = {
+            "id": row_id,
+            "email": email,
+            "password": pwd,
+            "access_token": access_token,
+            "totp_secret": totp_secret,
+            "email_source": email_source,
+            "proxy_used": proxy_used,
+            "extra": extra,
+            "archived_at": datetime.now().isoformat(),
+        }
+        with (indiv_dir / f"{safe_name}.json").open("w", encoding="utf-8") as f:
+            json.dump(account_data, f, ensure_ascii=False, indent=2)
+
+        # 3. 封存账号专属 storage_state.json (供后续出图与对话免密复用)
+        storage_state = extra.get("storage_state")
+        if isinstance(storage_state, dict):
+            try:
+                from core.fingerprint import derive_account_fingerprint_seed
+                fp_seed = derive_account_fingerprint_seed(email)
+                acc_profile_dir = Path("data/browser_profiles") / f"cloak_{fp_seed}"
+                acc_profile_dir.mkdir(parents=True, exist_ok=True)
+                with (acc_profile_dir / "storage_state.json").open("w", encoding="utf-8") as sf:
+                    json.dump(storage_state, sf, ensure_ascii=False, indent=2)
+            except Exception as ss_err:
+                logger.debug("[归档] 封存 storage_state 异常: %s", ss_err)
+
+    except Exception as exc:
+        logger.warning("[归档] 磁盘双写容灾归档异常（不影响主库落盘）: %s", exc)
     return None
 
 
@@ -619,12 +661,14 @@ def save_account_data(
     profile_id: str | None = None,
     batch_dir: Path | None = None,
     auto_plan_check: bool | None = None,
+    storage_state: dict | None = None,
 ) -> int:
     """
     将账号信息保存到 SQLite；output_path 仅为兼容旧调用方保留。
     返回新插入/更新的 row id。
     """
     from core.db import insert_account
+    from config import register as _reg_cfg
     extra = dict(extra or {})
     # 提取 country 与 profile_id
     if not country:
@@ -663,6 +707,9 @@ def save_account_data(
     if codex_status == "failed":
         codex_error = codex.get("message")
 
+    save_storage = bool(getattr(_reg_cfg, "SAVE_STORAGE_STATE_ON_REGISTER", True))
+    actual_storage_state = storage_state if (save_storage and isinstance(storage_state, dict)) else None
+
     row_id = insert_account(
         email=email,
         access_token=access_token,
@@ -676,6 +723,7 @@ def save_account_data(
         profile_id=profile_id,
         email_source=email_source,
         extra=extra,
+        storage_state=actual_storage_state,
         codex_status=codex_status,
         codex_error=codex_error,
     )

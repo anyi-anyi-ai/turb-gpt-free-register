@@ -28,7 +28,7 @@ from webui import config_editor
 
 logger = logging.getLogger(__name__)
 
-_POOL_SOURCE_VALUES = frozenset(("all", "outlook", "generic_api", "imap", "cloudflare_domain"))
+_POOL_SOURCE_VALUES = frozenset(("all", "outlook", "generic_api", "imap", "cloudflare_domain", "uned"))
 
 
 def _pool_source_arg(default: str = "outlook") -> str:
@@ -146,11 +146,16 @@ def _compact_account_for_list(row: dict) -> dict:
         "totp_setup_error", "totp_setup_message", "totp_setup_started_at", "totp_setup_completed_at",
         "email_change_status", "email_change_error", "email_change_new_email",
         "email_change_started_at", "email_change_completed_at",
+        "profile_id",
     )
     for key in optional_keys:
         value = row.get(key)
         if value is not None and value != "":
             out[key] = value
+    if not out.get("profile_id"):
+        pid = str(extra.get("profile_id") or (extra.get("cloakbrowser") or {}).get("profile_id") or "").strip()
+        if pid:
+            out["profile_id"] = pid
     plan = str(row.get("current_plan_type") or row.get("plan_type") or "").lower()
     if any(x in plan for x in ("plus", "pro", "team", "go")):
         expire = row.get("expires_at")
@@ -243,11 +248,21 @@ def _read_log_tail(path, *, max_bytes: int, default_running: bool = False, runni
 
 def create_app(auth_code: str | None = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
+    app.jinja_env.auto_reload = True
     _prepared_downloads: dict[str, dict] = {}
+
+    try:
+        from webui.asset_api import assets_bp
+        app.register_blueprint(assets_bp)
+    except Exception as _bp_err:
+        pass
 
     @app.after_request
     def _compress_json_response(response: Response):
         """默认对 JSON API 响应启用 gzip，减少本地前端拉取大列表的传输体积。"""
+        if app.testing or app.config.get("TESTING"):
+            return response
         accept_encoding = (request.headers.get("Accept-Encoding") or "").lower()
         # 默认开启 gzip：浏览器会自动带 gzip；本地脚本未带 Accept-Encoding 时也压缩。
         # 只有客户端明确声明 identity 且没有 gzip 时，才按明文返回。
@@ -373,6 +388,7 @@ def create_app(auth_code: str | None = None) -> Flask:
                 db.generic_api_email_pool_summary() if src == "generic_api"
                 else db.imap_email_pool_summary() if src == "imap"
                 else db.domain_email_pool_summary() if src == "cloudflare_domain"
+                else db.uned_email_pool_summary() if src == "uned"
                 else db.outlook_pool_summary()
             )
             for k in pool:
@@ -381,7 +397,7 @@ def create_app(auth_code: str | None = None) -> Flask:
         parsed = parse_email_sources(_email_cfg.EMAIL_SOURCE)
         if pool.get("total", 0) == 0 and not ("gptmail" in parsed and len(parsed) == 1):
             all_local = db.outlook_pool_summary()
-            for fn in (db.generic_api_email_pool_summary, db.imap_email_pool_summary):
+            for fn in (db.generic_api_email_pool_summary, db.imap_email_pool_summary, db.uned_email_pool_summary):
                 try:
                     s_item = fn()
                     for k in all_local:
@@ -917,6 +933,34 @@ def create_app(auth_code: str | None = None) -> Flask:
         headless = data.get("headless")
         res = warming_scheduler.trigger_batch_warming(ids, headless=headless)
         return jsonify(res), 202
+
+    @app.post("/api/accounts/repair-abnormal")
+    def api_accounts_repair_abnormal():
+        """一键扫描并自愈修复在 gptGrok2api 或本地标记异常的账号。"""
+        from scripts.repair_accounts import get_abnormal_account_emails
+        abnormal_emails = get_abnormal_account_emails()
+        all_accounts = db.query_accounts(limit=1000)
+        target_ids = []
+        target_emails = []
+        for acc in all_accounts:
+            em = str(acc.get("email") or "").strip().lower()
+            live_status = str(acc.get("live_check_status") or "")
+            token_expired = bool(acc.get("token_expired"))
+            if em in abnormal_emails or live_status in ("deactivated", "failed") or token_expired:
+                aid = int(acc.get("id") or 0)
+                if aid:
+                    target_ids.append(aid)
+                    target_emails.append(em)
+        if not target_ids:
+            return jsonify({"ok": True, "submitted": 0, "message": "当前未检测到任何异常账号，所有账号均正常！"})
+        res = warming_scheduler.trigger_batch_warming(target_ids)
+        return jsonify({
+            "ok": True,
+            "submitted": len(res.get("accepted_ids", [])),
+            "skipped": len(res.get("skipped_ids", [])),
+            "target_emails": target_emails,
+            "message": f"已自动识别 {len(target_ids)} 个异常账号，已提交自愈恢复队列"
+        }), 202
 
     @app.get("/api/warming/status")
     def api_warming_status():
@@ -1784,9 +1828,9 @@ def create_app(auth_code: str | None = None) -> Flask:
         分隔符兼容 ---- 与 ====。
         """
         data = request.get_json(silent=True) or {}
-        source = (data.get("source") or data.get("type") or "").strip()
-        if source not in ("outlook", "generic_api", "imap"):
-            return jsonify({"ok": False, "error": "导入时请选择具体类型：Outlook、通用 API 或通用 IMAP"}), 400
+        source = (data.get("source") or "outlook").strip().lower()
+        if source not in ("outlook", "generic_api", "imap", "uned"):
+            return jsonify({"ok": False, "error": "导入时请选择具体类型：Outlook、通用 API、通用 IMAP 或 UNED 学生邮箱"}), 400
         text = data.get("text") or ""
         as_registered = bool(data.get("as_registered", False))
         imap_server = str(data.get("imap_server") or "").strip()
@@ -1834,6 +1878,20 @@ def create_app(auth_code: str | None = None) -> Flask:
                     "imap_ssl": imap_ssl, "imap_username": "",
                 })
                 continue
+            if source == "uned":
+                if len(parts) < 1 or not parts[0]:
+                    continue
+                s_email = parts[0]
+                ident = s_email.split("@")[0].strip().lower()
+                records.append({
+                    "email": s_email.lower(),
+                    "uned_identifier": ident,
+                    "password": parts[1] if len(parts) > 1 else "",
+                    "forward_outlook": parts[2] if len(parts) > 2 else "",
+                    "full_name": parts[3] if len(parts) > 3 else "",
+                    "birth_date": parts[4] if len(parts) > 4 else "",
+                })
+                continue
             if len(parts) < 4:
                 continue
             records.append({
@@ -1847,6 +1905,7 @@ def create_app(auth_code: str | None = None) -> Flask:
         if not records:
             need = ("2 段：邮箱----取码地址" if source == "generic_api" else
                     "邮箱----IMAP密码 或 邮箱:IMAP密码" if source == "imap" else
+                    "邮箱----密码----绑定Outlook----姓名----生日" if source == "uned" else
                     "4 段：email----password----clientId----refreshToken")
             return jsonify({"ok": False, "error": f"未解析到有效邮箱行（需 {need}，---- 或 ==== 分隔）"}), 400
         if as_registered:
@@ -1855,6 +1914,8 @@ def create_app(auth_code: str | None = None) -> Flask:
             inserted, skipped = db.import_generic_api_emails(records)
         elif source == "imap":
             inserted, skipped = db.import_imap_emails(records)
+        elif source == "uned":
+            inserted, skipped = db.import_uned_emails(records)
         else:
             inserted, skipped = db.import_outlook_accounts(records)
         return jsonify({
@@ -1864,6 +1925,16 @@ def create_app(auth_code: str | None = None) -> Flask:
             "parsed": len(records),
             "as_registered": as_registered,
         })
+
+    @app.post("/api/uned/sync")
+    def api_uned_sync():
+        """一键从 uned_accounts 全量同步学生档案至 email_pool。"""
+        try:
+            res = db.sync_uned_accounts_to_email_pool()
+            return jsonify(res)
+        except Exception as exc:
+            logger.exception("同步 UNED 学生邮箱异常")
+            return jsonify({"ok": False, "error": str(exc)}), 500
 
     @app.post("/api/outlook/status")
     def api_outlook_status():
@@ -2835,6 +2906,11 @@ def create_app(auth_code: str | None = None) -> Flask:
             warning = ""
             if pool.get("available", 0) < count:
                 warning = f"通用 IMAP 邮箱池仅 {pool.get('available', 0)} 个可用，少于任务数 {count}，不足的会失败"
+        elif sources == ["uned"]:
+            pool = db.uned_email_pool_summary()
+            warning = ""
+            if pool.get("available", 0) < count:
+                warning = f"UNED 学生邮箱池仅 {pool.get('available', 0)} 个可用，少于任务数 {count}，不足的会失败"
         elif len(sources) > 1:
             available = 0
             if "outlook" in sources:
@@ -2843,6 +2919,8 @@ def create_app(auth_code: str | None = None) -> Flask:
                 available += db.generic_api_email_pool_summary().get("available", 0)
             if "imap" in sources:
                 available += db.imap_email_pool_summary().get("available", 0)
+            if "uned" in sources:
+                available += db.uned_email_pool_summary().get("available", 0)
             warning = ""
             if available < count:
                 warning = f"多个邮箱池合计仅 {available} 个可用，少于任务数 {count}，不足的会失败"
@@ -3183,5 +3261,307 @@ def create_app(auth_code: str | None = None) -> Flask:
         except Exception as exc:
             logger.exception("同步到 gptGrok2api 失败")
             return jsonify({"ok": False, "error": str(exc)}), 500
+
+    @app.post("/api/accounts/heal-by-email")
+    def api_account_heal_by_email():
+        """根据邮箱进行高优先级查活自愈重登，刷新最新 AT 并自动写回 gptGrok2api。"""
+        data = request.get_json(silent=True) or {}
+        email = str(data.get("email") or "").strip()
+        if not email:
+            return jsonify({"ok": False, "error": "email 不能为空"}), 400
+        acc = db.get_account_by_email(email)
+        if not acc:
+            return jsonify({"ok": False, "error": f"未找到邮箱为 {email} 的账号"}), 404
+        acc_id = int(acc.get("id") or 0)
+        queued = live_check_service.enqueue_account_live_check(
+            account_id=acc_id,
+            email=email,
+            trigger="self_heal",
+            proxy=None,
+        )
+        if queued.get("accepted"):
+            return jsonify({
+                "ok": True,
+                "message": f"账号 {email} 已成功加入自愈重登队列",
+                "status": "queued",
+                "account_id": acc_id,
+            }), 202
+        elif queued.get("busy"):
+            return jsonify({
+                "ok": True,
+                "message": f"账号 {email} 正在执行查活或已在队列中",
+                "status": "busy",
+                "account_id": acc_id,
+            }), 200
+        else:
+            return jsonify({
+                "ok": False,
+                "error": queued.get("error") or "自愈入队失败",
+                "account_id": acc_id,
+            }), 500
+
+    # ============================================================
+    # Grok 自动化注册与账号管理 API
+    # ============================================================
+    @app.get("/api/grok/status")
+    def api_grok_status():
+        from core.grok.registration_service import grok_reg_manager
+        from core.db.email_pool import outlook_pool_summary
+        pool_info = outlook_pool_summary(for_service="grok")
+        counts_res = db.query_grok_accounts(page=1, page_size=1)
+        status_counts = counts_res.get("status_counts", {})
+        total_accounts = sum(status_counts.values()) if status_counts else 0
+
+        detected_proxy = ""
+        try:
+            import socket
+            for p in (7890, 7897):
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.1)
+                    if s.connect_ex(("127.0.0.1", p)) == 0:
+                        detected_proxy = f"http://127.0.0.1:{p}"
+                        break
+        except Exception:
+            pass
+
+        return jsonify({
+            "ok": True,
+            **grok_reg_manager.get_status(),
+            "pool_summary": pool_info,
+            "account_stats": {
+                "total": total_accounts,
+                "healthy": status_counts.get("healthy", 0),
+                "degraded": status_counts.get("degraded", 0),
+                "bot_flagged": status_counts.get("bot_flagged", 0),
+                "already_registered": status_counts.get("already_registered", 0),
+            },
+            "detected_proxy": detected_proxy,
+        })
+
+    @app.post("/api/grok/start")
+    def api_grok_start():
+        data = request.get_json(silent=True) or {}
+        count = max(1, min(1000, int(data.get("count") or 1)))
+        concurrency = max(1, min(10, int(data.get("concurrency") or 1)))
+        proxy = str(data.get("proxy") or "").strip()
+        countries = data.get("countries")
+        sync_downstream = bool(data.get("sync", True))
+        run_probe = bool(data.get("run_quality_probe", True))
+        enable_device_oauth = bool(data.get("enable_device_oauth", True))
+        headless = data.get("headless")
+
+        from core.grok.registration_service import grok_reg_manager
+        started = grok_reg_manager.start_batch(
+            count=count,
+            concurrency=concurrency,
+            proxy=proxy,
+            countries=countries,
+            sync_to_downstream=sync_downstream,
+            run_quality_probe=run_probe,
+            enable_device_oauth=enable_device_oauth,
+            headless=headless,
+        )
+        if not started:
+            return jsonify({"ok": False, "error": "已有 Grok 注册任务正在运行中"}), 409
+        proxy_desc = proxy if proxy else "自动按多国纯净节点轮换"
+        return jsonify({"ok": True, "message": f"已启动 {count} 个 Grok 注册任务 (并发={concurrency}, 出口={proxy_desc})", "proxy": proxy})
+
+    @app.post("/api/grok/stop")
+    def api_grok_stop():
+        from core.grok.registration_service import grok_reg_manager
+        grok_reg_manager.stop()
+        return jsonify({"ok": True, "message": "已发送停止信号"})
+
+    @app.post("/api/grok/logs/clear")
+    def api_grok_clear_logs():
+        from core.grok.registration_service import grok_reg_manager
+        grok_reg_manager.clear_logs()
+        return jsonify({"ok": True, "message": "已清空日志"})
+
+    @app.get("/api/grok/accounts")
+    def api_grok_accounts():
+        page = max(1, int(request.args.get("page") or 1))
+        page_size = max(1, min(200, int(request.args.get("page_size") or 50)))
+        status = request.args.get("status")
+        search = request.args.get("search")
+        res = db.query_grok_accounts(status=status, search=search, page=page, page_size=page_size)
+        return jsonify({"ok": True, **res})
+
+    @app.post("/api/grok/accounts/delete")
+    def api_grok_delete():
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids") or []
+        emails = data.get("emails") or []
+        deleted = db.delete_grok_accounts(account_ids=ids, emails=emails)
+        return jsonify({"ok": True, "deleted": deleted})
+
+    @app.get("/api/grok/accounts/export")
+    def api_grok_export():
+        status = request.args.get("status")
+        exclude_degraded = request.args.get("exclude_degraded", "true").lower() == "true"
+        fmt = request.args.get("format", "txt")
+        text_data = db.export_grok_accounts_text(status=status, exclude_degraded=exclude_degraded, format_type=fmt)
+        if fmt == "json":
+            resp = make_response(text_data)
+            resp.headers["Content-Type"] = "application/json; charset=utf-8"
+            resp.headers["Content-Disposition"] = "attachment; filename=grok_accounts.json"
+            return resp
+        elif fmt == "cpa":
+            resp = make_response(text_data)
+            resp.headers["Content-Type"] = "application/json; charset=utf-8"
+            resp.headers["Content-Disposition"] = "attachment; filename=grok_accounts_cpa.json"
+            return resp
+        elif fmt == "grok2api":
+            resp = make_response(text_data)
+            resp.headers["Content-Type"] = "application/json; charset=utf-8"
+            resp.headers["Content-Disposition"] = "attachment; filename=grok_accounts_grok2api.json"
+            return resp
+        else:
+            resp = make_response(text_data)
+            resp.headers["Content-Type"] = "text/plain; charset=utf-8"
+            resp.headers["Content-Disposition"] = "attachment; filename=grok_accounts_gptgrok2api.txt"
+            return resp
+
+    @app.get("/api/grok/grokiq/status")
+    def api_grok_grokiq_status():
+        from core.grok.grokiq_client import get_grokiq_config
+        events = db.fetch_pending_outbox_events(limit=5)
+        return jsonify({
+            "ok": True,
+            "config": get_grokiq_config(),
+            "pending_outbox_count": len(events),
+        })
+
+    @app.post("/api/grok/accounts/liveness-check")
+    def api_grok_liveness_check():
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids") or []
+        concurrency = max(1, min(10, int(data.get("concurrency") or 5)))
+        explicit_proxy = data.get("proxy") or None
+
+        if ids:
+            accounts = db.get_grok_accounts_by_ids([int(i) for i in ids])
+        else:
+            res = db.query_grok_accounts(page=1, page_size=1000)
+            accounts = res.get("items") or []
+
+        if not accounts:
+            return jsonify({"ok": False, "error": "没有可供测活的账号"}), 400
+
+        from core.grok.sso_checker import batch_check_grok_liveness
+        check_results = batch_check_grok_liveness(
+            accounts,
+            concurrency=concurrency,
+            explicit_proxy=explicit_proxy,
+        )
+
+        counts = {"healthy": 0, "expired": 0, "bot_flagged": 0, "error": 0, "degraded": 0}
+        for r in check_results:
+            st = r.status if r.status in counts else "error"
+            counts[st] += 1
+            if r.account_id:
+                db.update_grok_account_status(
+                    r.account_id,
+                    status=r.status,
+                    bot_flag_source=r.bot_flag_source,
+                    bot_flag_details=r.bot_flag_details,
+                )
+
+        return jsonify({
+            "ok": True,
+            "total": len(check_results),
+            "counts": counts,
+            "results": [
+                {
+                    "id": r.account_id,
+                    "email": r.email,
+                    "status": r.status,
+                    "ok": r.ok,
+                    "error": r.error,
+                    "proxy_used": r.proxy_used,
+                }
+                for r in check_results
+            ],
+        })
+
+    @app.post("/api/grok/accounts/probe-inspect")
+    def api_grok_probe_inspect():
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids") or []
+        profile_id = data.get("profile_id") or None
+        proxy = str(data.get("proxy") or "").strip()
+
+        if ids:
+            accounts = db.get_grok_accounts_by_ids([int(i) for i in ids])
+        else:
+            res = db.query_grok_accounts(page=1, page_size=1000)
+            accounts = res.get("items") or []
+
+        if not accounts:
+            return jsonify({"ok": False, "error": "没有可供巡检的账号"}), 400
+
+        from core.grok.quality_checker import GrokQualityChecker
+        inspected = []
+        counts = {"healthy": 0, "degraded": 0, "bot_flagged": 0, "error": 0}
+
+        for acc in accounts:
+            acc_id = int(acc.get("id") or 0)
+            email = str(acc.get("email") or "")
+            sso = str(acc.get("sso_token") or acc.get("sso_rw") or "")
+            acc_proxy = proxy or str(acc.get("proxy_used") or "")
+            checker = GrokQualityChecker(proxy=acc_proxy, timeout_sec=20)
+            try:
+                res = checker.check(sso_token=sso, run_probe=True, profile_id=profile_id)
+                st = res.status if res.status in counts else "error"
+                counts[st] += 1
+                if acc_id:
+                    db.update_grok_account_status(
+                        acc_id,
+                        status=res.status,
+                        bot_flag_source=res.bot_flag_source,
+                        bot_flag_details=res.bot_flag_details,
+                        probe_tps=res.probe_tps,
+                        probe_reasoning_tokens=res.probe_reasoning_tokens,
+                    )
+                inspected.append({
+                    "id": acc_id,
+                    "email": email,
+                    "status": res.status,
+                    "tps": res.probe_tps,
+                    "reasoning_tokens": res.probe_reasoning_tokens,
+                    "reasons": res.reasons,
+                })
+            except Exception as exc:
+                counts["error"] += 1
+                inspected.append({
+                    "id": acc_id,
+                    "email": email,
+                    "status": "error",
+                    "error": str(exc),
+                })
+
+        return jsonify({
+            "ok": True,
+            "total": len(accounts),
+            "counts": counts,
+            "results": inspected,
+        })
+
+    @app.post("/api/grok/accounts/push-gptgrok2api")
+    def api_grok_push_gptgrok2api():
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids") or []
+
+        if ids:
+            accounts = db.get_grok_accounts_by_ids([int(i) for i in ids])
+        else:
+            accounts = db.get_unsynced_grok_accounts(limit=100)
+
+        if not accounts:
+            return jsonify({"ok": False, "error": "没有需要同步的 Grok 账号"}), 400
+
+        from core.gptgrok2api_sync import push_grok_accounts_to_gptgrok2api
+        res = push_grok_accounts_to_gptgrok2api(accounts)
+        return jsonify({"ok": True, **res})
 
     return app

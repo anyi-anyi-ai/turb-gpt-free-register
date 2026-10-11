@@ -1,0 +1,1195 @@
+{
+  "clips": [
+    {
+      "status": "complete",
+      "title": "频率共振",
+      "play_count": 0,
+      "upvote_count": 0,
+      "allow_comments": true,
+      "is_verified": false,
+      "id": "d68c89c4-bbf5-41fc-bd44-29bbe75ecc91",
+      "entity_type": "song_schema",
+      "video_url": "",
+      "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+      "media_urls": [
+        {
+          "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/d68c89c4-bbf5-41fc-bd44-29bbe75ecc91.m4a",
+          "content_type": "m4a-opus",
+          "delivery": "progressive",
+          "encoding": "1.0.0"
+        }
+      ],
+      "image_url": "https://cdn2.suno.ai/image_c636e20f-165c-4461-952d-7238a23ca5b4.jpeg",
+      "image_large_url": "https://cdn2.suno.ai/image_large_c636e20f-165c-4461-952d-7238a23ca5b4.jpeg",
+      "major_model_version": "v6",
+      "model_name": "chirp-goose",
+      "metadata": {
+        "tags": "电影原声, 管弦, 流行",
+        "prompt": "[Intro]\nAh~ Oh~\n\n[Verse]\n极光划破了 沉默的冰原\n像你眼底 闪烁的星弦\n航向未知的 孤独飞行船\n在失重里 寻找着光年\n\n[Chorus]\n就在这 绚烂的星穹之巅！\n折射出 你我重逢的象限！\n不需要 氧气和引力成全！\n频率共振 就是永远！\n\n",
+        "concat_history": [
+          {
+            "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+            "continue_at": 87.96000000000001,
+            "type": "gen",
+            "source": "web",
+            "source_is_webview": false,
+            "infill": false
+          },
+          {
+            "id": "c636e20f-165c-4461-952d-7238a23ca5b4"
+          }
+        ],
+        "type": "concat",
+        "duration": 183.8,
+        "can_publish_with_vocal": true,
+        "vox_render_mode": "strict",
+        "can_remix": true,
+        "is_remix": true,
+        "has_stem": false,
+        "uses_latest_model": true,
+        "model_badges": {
+          "songcard": {
+            "display_name": "V6",
+            "light": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            },
+            "dark": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            }
+          },
+          "songrow": {
+            "display_name": "V6-MINI",
+            "light": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            },
+            "dark": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            }
+          }
+        },
+        "secondary_badges": [
+          {
+            "display_name": "FULL SONG",
+            "icon_key": "full_song",
+            "light": {
+              "text_color": "A3A3A3"
+            },
+            "dark": {
+              "text_color": "A3A3A3"
+            }
+          }
+        ]
+      },
+      "is_liked": false,
+      "user_id": "0e408033-cdc9-4c32-ac18-dd695fd50a05",
+      "display_name": "tanxiulan23426",
+      "handle": "tanxiulan23426",
+      "is_handle_updated": false,
+      "avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg",
+      "is_trashed": false,
+      "is_hidden": false,
+      "created_at": "2026-10-03T08:39:44.786Z",
+      "is_public": false,
+      "is_persona_root": false,
+      "is_following_creator": false,
+      "albums": [],
+      "comment_count": 0,
+      "flag_count": 0,
+      "is_download_unlocked": false,
+      "is_contest_clip": false,
+      "has_hook": false,
+      "batch_index": 0,
+      "action_config": {
+        "actions": [
+          {
+            "action_type": "add_to_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "like_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "share_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "dislike_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "report_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remove_from_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "play_next",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "add_to_queue",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "delete_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "edit_song_details",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_hook",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "download_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "open_in_studio",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "publish_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remaster",
+            "disabled": false,
+            "visible": true,
+            "action_override": {
+              "type": "upsell",
+              "slug": "remaster",
+              "feature_type": {
+                "type": "remaster"
+              }
+            }
+          },
+          {
+            "action_type": "remix_extend",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_cover",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_reuse_style",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_voice",
+            "disabled": false,
+            "visible": true
+          }
+        ]
+      },
+      "clip_roots": {
+        "clips": [
+          {
+            "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+            "title": "频率共振",
+            "image_url": "https://cdn2.suno.ai/image_2630eaad-1654-4064-bca6-b616ca84c286.jpeg",
+            "is_public": false,
+            "user_display_name": "tanxiulan23426",
+            "user_handle": "tanxiulan23426",
+            "user_avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg"
+          }
+        ],
+        "clip_attribution_type": "remix"
+      }
+    },
+    {
+      "status": "complete",
+      "title": "频率共振",
+      "play_count": 0,
+      "upvote_count": 0,
+      "allow_comments": true,
+      "is_verified": false,
+      "id": "c636e20f-165c-4461-952d-7238a23ca5b4",
+      "entity_type": "song_schema",
+      "video_url": "",
+      "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+      "media_urls": [
+        {
+          "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/c636e20f-165c-4461-952d-7238a23ca5b4.m4a",
+          "content_type": "m4a-opus",
+          "delivery": "progressive",
+          "encoding": "1.0.0"
+        }
+      ],
+      "image_url": "https://cdn2.suno.ai/image_c636e20f-165c-4461-952d-7238a23ca5b4.jpeg",
+      "image_large_url": "https://cdn2.suno.ai/image_large_c636e20f-165c-4461-952d-7238a23ca5b4.jpeg",
+      "major_model_version": "v6",
+      "model_name": "chirp-goose",
+      "metadata": {
+        "tags": "电影原声管弦流行，宽广立体声与清晰自然、置前的人声；C大调，75 BPM，静谧舒展并逐层推升；清脆稀疏的钢琴碎音开场，宽阔弦乐长音、细腻高音点缀、圆润铜管与合唱质感交织，主歌克制，副歌宏阔渐强；清透有呼吸感的女高音。",
+        "prompt": "",
+        "history": [
+          {
+            "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+            "continue_at": 87.96000000000001,
+            "type": "gen",
+            "source": "web",
+            "source_is_webview": false,
+            "infill": false
+          }
+        ],
+        "edited_clip_id": "2630eaad-1654-4064-bca6-b616ca84c286",
+        "continue_at": 87.96000000000001,
+        "type": "gen",
+        "duration": 95.84,
+        "refund_credits": false,
+        "stream": true,
+        "infill": false,
+        "make_instrumental": true,
+        "control_sliders": {
+          "aug_creativity": 1
+        },
+        "vox_render_mode": "strict",
+        "task": "extend",
+        "can_remix": true,
+        "show_remix": true,
+        "is_remix": true,
+        "priority": 0,
+        "has_stem": false,
+        "uses_latest_model": true,
+        "model_badges": {
+          "songcard": {
+            "display_name": "V6",
+            "light": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            },
+            "dark": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            }
+          },
+          "songrow": {
+            "display_name": "V6-MINI",
+            "light": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            },
+            "dark": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            }
+          }
+        },
+        "secondary_badges": [
+          {
+            "display_name": "EXTEND 1",
+            "icon_key": "part",
+            "light": {
+              "text_color": "A3A3A3"
+            },
+            "dark": {
+              "text_color": "A3A3A3"
+            }
+          }
+        ],
+        "image_config": {
+          "use_image_config_template": true,
+          "id": "black_and_white_photograph",
+          "default_cover_style": "brand_refresh"
+        },
+        "is_mumble": false
+      },
+      "is_liked": false,
+      "user_id": "0e408033-cdc9-4c32-ac18-dd695fd50a05",
+      "display_name": "tanxiulan23426",
+      "handle": "tanxiulan23426",
+      "is_handle_updated": false,
+      "avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg",
+      "is_trashed": false,
+      "is_hidden": false,
+      "created_at": "2026-10-03T08:34:25.151Z",
+      "is_public": false,
+      "is_persona_root": false,
+      "is_following_creator": false,
+      "albums": [],
+      "comment_count": 0,
+      "flag_count": 0,
+      "display_tags": "电影原声, 管弦, 流行",
+      "is_download_unlocked": false,
+      "is_contest_clip": false,
+      "has_hook": false,
+      "batch_index": 1,
+      "action_config": {
+        "actions": [
+          {
+            "action_type": "add_to_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "like_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "share_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "dislike_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "report_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remove_from_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "play_next",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "add_to_queue",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "delete_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "edit_song_details",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_hook",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "download_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "open_in_studio",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "publish_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remaster",
+            "disabled": false,
+            "visible": true,
+            "action_override": {
+              "type": "upsell",
+              "slug": "remaster",
+              "feature_type": {
+                "type": "remaster"
+              }
+            }
+          },
+          {
+            "action_type": "remix_extend",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_cover",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_reuse_style",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_voice",
+            "disabled": false,
+            "visible": true
+          }
+        ]
+      },
+      "clip_roots": {
+        "clips": [
+          {
+            "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+            "title": "频率共振",
+            "image_url": "https://cdn2.suno.ai/image_2630eaad-1654-4064-bca6-b616ca84c286.jpeg",
+            "is_public": false,
+            "user_display_name": "tanxiulan23426",
+            "user_handle": "tanxiulan23426",
+            "user_avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg"
+          }
+        ],
+        "clip_attribution_type": "remix"
+      }
+    },
+    {
+      "status": "complete",
+      "title": "频率共振",
+      "play_count": 0,
+      "upvote_count": 0,
+      "allow_comments": true,
+      "is_verified": false,
+      "id": "c553ffc5-a8b5-4ae2-95a3-fb2083309b27",
+      "entity_type": "song_schema",
+      "video_url": "",
+      "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+      "media_urls": [
+        {
+          "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/c553ffc5-a8b5-4ae2-95a3-fb2083309b27.m4a",
+          "content_type": "m4a-opus",
+          "delivery": "progressive",
+          "encoding": "1.0.0"
+        }
+      ],
+      "image_url": "https://cdn2.suno.ai/image_c553ffc5-a8b5-4ae2-95a3-fb2083309b27.jpeg",
+      "image_large_url": "https://cdn2.suno.ai/image_large_c553ffc5-a8b5-4ae2-95a3-fb2083309b27.jpeg",
+      "major_model_version": "v6",
+      "model_name": "chirp-goose",
+      "metadata": {
+        "tags": "电影原声管弦流行，宽广立体声与清晰自然、置前的人声；C大调，75 BPM，静谧舒展并逐层推升；清脆稀疏的钢琴碎音开场，宽阔弦乐长音、细腻高音点缀、圆润铜管与合唱质感交织，主歌克制，副歌宏阔渐强；清透有呼吸感的女高音。",
+        "prompt": "",
+        "history": [
+          {
+            "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+            "continue_at": 87.96000000000001,
+            "type": "gen",
+            "source": "web",
+            "source_is_webview": false,
+            "infill": false
+          }
+        ],
+        "edited_clip_id": "2630eaad-1654-4064-bca6-b616ca84c286",
+        "continue_at": 87.96000000000001,
+        "type": "gen",
+        "duration": 46.44,
+        "refund_credits": false,
+        "stream": true,
+        "infill": false,
+        "make_instrumental": true,
+        "control_sliders": {
+          "aug_creativity": 1
+        },
+        "vox_render_mode": "strict",
+        "task": "extend",
+        "can_remix": true,
+        "show_remix": true,
+        "is_remix": true,
+        "priority": 0,
+        "has_stem": false,
+        "uses_latest_model": true,
+        "model_badges": {
+          "songcard": {
+            "display_name": "V6",
+            "light": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            },
+            "dark": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            }
+          },
+          "songrow": {
+            "display_name": "V6-MINI",
+            "light": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            },
+            "dark": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            }
+          }
+        },
+        "secondary_badges": [
+          {
+            "display_name": "EXTEND 1",
+            "icon_key": "part",
+            "light": {
+              "text_color": "A3A3A3"
+            },
+            "dark": {
+              "text_color": "A3A3A3"
+            }
+          }
+        ],
+        "image_config": {
+          "use_image_config_template": true,
+          "id": "black_and_white_photograph",
+          "default_cover_style": "brand_refresh"
+        },
+        "is_mumble": false
+      },
+      "is_liked": false,
+      "user_id": "0e408033-cdc9-4c32-ac18-dd695fd50a05",
+      "display_name": "tanxiulan23426",
+      "handle": "tanxiulan23426",
+      "is_handle_updated": false,
+      "avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg",
+      "is_trashed": false,
+      "is_hidden": false,
+      "created_at": "2026-10-03T08:34:25.150Z",
+      "is_public": false,
+      "is_persona_root": false,
+      "is_following_creator": false,
+      "albums": [],
+      "comment_count": 0,
+      "flag_count": 0,
+      "display_tags": "电影原声, 管弦, 流行",
+      "is_download_unlocked": false,
+      "is_contest_clip": false,
+      "has_hook": false,
+      "batch_index": 0,
+      "action_config": {
+        "actions": [
+          {
+            "action_type": "add_to_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "like_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "share_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "dislike_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "report_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remove_from_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "play_next",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "add_to_queue",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "delete_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "edit_song_details",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_hook",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "download_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "open_in_studio",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "publish_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remaster",
+            "disabled": false,
+            "visible": true,
+            "action_override": {
+              "type": "upsell",
+              "slug": "remaster",
+              "feature_type": {
+                "type": "remaster"
+              }
+            }
+          },
+          {
+            "action_type": "remix_extend",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_cover",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_reuse_style",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_voice",
+            "disabled": false,
+            "visible": true
+          }
+        ]
+      },
+      "clip_roots": {
+        "clips": [
+          {
+            "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+            "title": "频率共振",
+            "image_url": "https://cdn2.suno.ai/image_2630eaad-1654-4064-bca6-b616ca84c286.jpeg",
+            "is_public": false,
+            "user_display_name": "tanxiulan23426",
+            "user_handle": "tanxiulan23426",
+            "user_avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg"
+          }
+        ],
+        "clip_attribution_type": "remix"
+      }
+    },
+    {
+      "status": "complete",
+      "title": "频率共振",
+      "play_count": 0,
+      "upvote_count": 0,
+      "allow_comments": true,
+      "is_verified": false,
+      "id": "2630eaad-1654-4064-bca6-b616ca84c286",
+      "entity_type": "song_schema",
+      "video_url": "",
+      "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+      "media_urls": [
+        {
+          "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/2630eaad-1654-4064-bca6-b616ca84c286.m4a",
+          "content_type": "m4a-opus",
+          "delivery": "progressive",
+          "encoding": "1.0.0"
+        }
+      ],
+      "image_url": "https://cdn2.suno.ai/image_2630eaad-1654-4064-bca6-b616ca84c286.jpeg",
+      "image_large_url": "https://cdn2.suno.ai/image_large_2630eaad-1654-4064-bca6-b616ca84c286.jpeg",
+      "major_model_version": "v6",
+      "model_name": "chirp-goose",
+      "metadata": {
+        "tags": "电影原声管弦流行，宽广立体声与清晰自然、置前的人声；C大调，75 BPM，静谧舒展并逐层推升；清脆稀疏的钢琴碎音开场，宽阔弦乐长音、细腻高音点缀、圆润铜管与合唱质感交织，主歌克制，副歌宏阔渐强；清透有呼吸感的女高音。",
+        "prompt": "[Intro]\nAh~ Oh~\n\n[Verse]\n极光划破了 沉默的冰原\n像你眼底 闪烁的星弦\n航向未知的 孤独飞行船\n在失重里 寻找着光年\n\n[Chorus]\n就在这 绚烂的星穹之巅！\n折射出 你我重逢的象限！\n不需要 氧气和引力成全！\n频率共振 就是永远！",
+        "gpt_description_prompt": "《极光变奏：星穹的极昼》空灵仙气女声，清脆钢琴碎音，大气宏阔管弦交响渐强，电影原声质感，C大调，75 BPM。\n\n[00:00 Intro 钢琴碎音，如星光闪烁]\n(Ah~ Oh~)\n\n[00:20 Verse 主歌]\n极光划破了 沉默的冰原\n像你眼底 闪烁的星弦\n航向未知的 孤独飞行船\n在失重里 寻找着光年\n\n[00:50 Chorus 副歌]\n就在这 绚烂的星穹之巅！\n折射出 你我重逢的象限！\n不需要 氧气和引力成全！\n频率共振 就是永远！",
+        "type": "gen",
+        "duration": 87.96,
+        "refund_credits": false,
+        "stream": true,
+        "make_instrumental": false,
+        "control_sliders": {
+          "aug_creativity": 1
+        },
+        "vox_render_mode": "strict",
+        "task": "agentic_thinking",
+        "can_remix": true,
+        "show_remix": true,
+        "is_remix": false,
+        "priority": 0,
+        "has_stem": false,
+        "uses_latest_model": true,
+        "model_badges": {
+          "songcard": {
+            "display_name": "V6",
+            "light": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            },
+            "dark": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            }
+          },
+          "songrow": {
+            "display_name": "V6-MINI",
+            "light": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            },
+            "dark": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            }
+          }
+        },
+        "image_config": {
+          "use_image_config_template": true,
+          "id": "cyanotype",
+          "default_cover_style": "brand_refresh"
+        },
+        "is_mumble": false
+      },
+      "is_liked": false,
+      "user_id": "0e408033-cdc9-4c32-ac18-dd695fd50a05",
+      "display_name": "tanxiulan23426",
+      "handle": "tanxiulan23426",
+      "is_handle_updated": false,
+      "avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg",
+      "is_trashed": false,
+      "is_hidden": false,
+      "created_at": "2026-10-03T08:10:37.429Z",
+      "is_public": false,
+      "is_persona_root": false,
+      "is_following_creator": false,
+      "albums": [],
+      "comment_count": 0,
+      "flag_count": 0,
+      "display_tags": "电影原声, 管弦, 流行",
+      "is_download_unlocked": false,
+      "is_contest_clip": false,
+      "has_hook": false,
+      "batch_index": 1,
+      "action_config": {
+        "actions": [
+          {
+            "action_type": "add_to_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "like_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "share_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "dislike_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "report_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remove_from_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "play_next",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "add_to_queue",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "delete_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "edit_song_details",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_hook",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "download_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "open_in_studio",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "publish_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remaster",
+            "disabled": false,
+            "visible": true,
+            "action_override": {
+              "type": "upsell",
+              "slug": "remaster",
+              "feature_type": {
+                "type": "remaster"
+              }
+            }
+          },
+          {
+            "action_type": "remix_extend",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_cover",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_reuse_style",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_voice",
+            "disabled": false,
+            "visible": true
+          }
+        ]
+      }
+    },
+    {
+      "status": "complete",
+      "title": "频率共振",
+      "play_count": 4,
+      "upvote_count": 0,
+      "allow_comments": true,
+      "is_verified": false,
+      "id": "c861bf72-f4dd-4671-86e3-4a397efb264b",
+      "entity_type": "song_schema",
+      "video_url": "",
+      "audio_url": "https://studio-api.prod.suno.com/api/forbidden",
+      "media_urls": [
+        {
+          "url": "https://d2lwuy8qc234o3.cloudfront.net/1/clip/c861bf72-f4dd-4671-86e3-4a397efb264b.m4a",
+          "content_type": "m4a-opus",
+          "delivery": "progressive",
+          "encoding": "1.0.0"
+        }
+      ],
+      "image_url": "https://cdn2.suno.ai/image_c861bf72-f4dd-4671-86e3-4a397efb264b.jpeg",
+      "image_large_url": "https://cdn2.suno.ai/image_large_c861bf72-f4dd-4671-86e3-4a397efb264b.jpeg",
+      "major_model_version": "v6",
+      "model_name": "chirp-goose",
+      "metadata": {
+        "tags": "电影原声管弦乐，C大调；清脆稀疏的钢琴碎音引入宽阔弦乐长音与细腻高音点缀，副歌叠加圆润铜管和合唱质感；宽广立体声，清晰自然的人声置前；75 BPM，静谧舒展至层层渐强；清透有呼吸感的高音女声。",
+        "prompt": "[Intro]\nAh~ Oh~\n\n[Verse]\n极光划破了 沉默的冰原\n像你眼底 闪烁的星弦\n航向未知的 孤独飞行船\n在失重里 寻找着光年\n\n[Chorus]\n就在这 绚烂的星穹之巅！\n折射出 你我重逢的象限！\n不需要 氧气和引力成全！\n频率共振 就是永远！",
+        "gpt_description_prompt": "《极光变奏：星穹的极昼》空灵仙气女声，清脆钢琴碎音，大气宏阔管弦交响渐强，电影原声质感，C大调，75 BPM。\n\n[00:00 Intro 钢琴碎音，如星光闪烁]\n(Ah~ Oh~)\n\n[00:20 Verse 主歌]\n极光划破了 沉默的冰原\n像你眼底 闪烁的星弦\n航向未知的 孤独飞行船\n在失重里 寻找着光年\n\n[00:50 Chorus 副歌]\n就在这 绚烂的星穹之巅！\n折射出 你我重逢的象限！\n不需要 氧气和引力成全！\n频率共振 就是永远！",
+        "type": "gen",
+        "duration": 89.96,
+        "refund_credits": false,
+        "stream": true,
+        "make_instrumental": false,
+        "control_sliders": {
+          "aug_creativity": 1
+        },
+        "vox_render_mode": "strict",
+        "task": "agentic_thinking",
+        "can_remix": true,
+        "show_remix": true,
+        "is_remix": false,
+        "priority": 0,
+        "has_stem": false,
+        "uses_latest_model": true,
+        "model_badges": {
+          "songcard": {
+            "display_name": "V6",
+            "light": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            },
+            "dark": {
+              "text_color": "FD429C",
+              "background_color": "0000004D",
+              "border_color": "00000000"
+            }
+          },
+          "songrow": {
+            "display_name": "V6-MINI",
+            "light": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            },
+            "dark": {
+              "text_color": "C2C2C2",
+              "text_color_gradient": [
+                "C2C2C2",
+                "C2C2C2",
+                "ADADAD",
+                "989898",
+                "838383",
+                "6E6E6E"
+              ]
+            }
+          }
+        },
+        "image_config": {
+          "use_image_config_template": true,
+          "id": "cyanotype",
+          "default_cover_style": "brand_refresh"
+        },
+        "is_mumble": false
+      },
+      "is_liked": false,
+      "user_id": "0e408033-cdc9-4c32-ac18-dd695fd50a05",
+      "display_name": "tanxiulan23426",
+      "handle": "tanxiulan23426",
+      "is_handle_updated": false,
+      "avatar_image_url": "https://cdn1.suno.ai/sAura14.jpg",
+      "is_trashed": false,
+      "is_hidden": false,
+      "created_at": "2026-10-03T08:10:37.429Z",
+      "is_public": false,
+      "reaction": {
+        "play_count": 1,
+        "skip_count": 0,
+        "flagged": false,
+        "clip": "c861bf72-f4dd-4671-86e3-4a397efb264b",
+        "updated_at": "2026-10-03T08:17:07.152Z"
+      },
+      "is_persona_root": false,
+      "is_following_creator": false,
+      "albums": [],
+      "comment_count": 0,
+      "flag_count": 0,
+      "is_download_unlocked": false,
+      "is_contest_clip": false,
+      "has_hook": false,
+      "batch_index": 0,
+      "action_config": {
+        "actions": [
+          {
+            "action_type": "add_to_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "like_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "share_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "dislike_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "report_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remove_from_playlist",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "play_next",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "add_to_queue",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "delete_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "edit_song_details",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_hook",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "download_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "open_in_studio",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "publish_song",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remaster",
+            "disabled": false,
+            "visible": true,
+            "action_override": {
+              "type": "upsell",
+              "slug": "remaster",
+              "feature_type": {
+                "type": "remaster"
+              }
+            }
+          },
+          {
+            "action_type": "remix_extend",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_cover",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "remix_reuse_style",
+            "disabled": false,
+            "visible": true
+          },
+          {
+            "action_type": "create_voice",
+            "disabled": false,
+            "visible": true
+          }
+        ]
+      }
+    }
+  ],
+  "has_more": false
+}

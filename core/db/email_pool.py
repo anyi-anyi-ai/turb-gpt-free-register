@@ -868,3 +868,64 @@ def domain_email_pool_summary() -> dict:
 def delete_domain_email(email: str) -> bool:
     """从域名邮箱池删除一个邮箱。"""
     return delete_email_pool(email, source="cloudflare_domain")
+
+
+def sync_email_pool_to_emails_txt(target_file: Path | str | None = None) -> int:
+    """将 SQLite email_pool 中 outlook 邮箱同步至 emails.txt。"""
+    from pathlib import Path
+    if target_file is None:
+        from .base import _PROJECT_ROOT
+        target_path = _PROJECT_ROOT / "emails.txt"
+    else:
+        target_path = Path(target_file)
+    
+    rows = _load_outlook()
+    lines = []
+    seen = set()
+    for r in rows:
+        email = (r.get("email") or "").strip()
+        if not email or email.lower() in seen:
+            continue
+        seen.add(email.lower())
+        pwd = r.get("password") or "x"
+        cid = r.get("client_id") or "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
+        rt = r.get("refresh_token") or ""
+        if rt and cid:
+            lines.append(f"{email}----{pwd}----{rt}----{cid}")
+        elif pwd:
+            lines.append(f"{email}----{pwd}")
+        else:
+            lines.append(email)
+    
+    with open(target_path, "w", encoding="utf-8") as f:
+        f.write("# turb-gpt-free-register 邮箱池 (自动由 SQLite email_pool 同步)\n")
+        f.write("# 格式: 邮箱----密码----refresh_token----client_id\n")
+        for line in lines:
+            f.write(line + "\n")
+    return len(lines)
+
+
+def import_email_pool(source: str, records: list[dict], as_registered: bool = False) -> int:
+    """统一邮箱素材导入入口。"""
+    src = (source or "outlook").strip().lower()
+    if as_registered:
+        inserted, _ = import_registered_email_accounts(records, src)
+        return inserted
+    if src == "outlook":
+        inserted, _ = import_outlook_accounts(records)
+        try:
+            sync_email_pool_to_emails_txt()
+        except Exception:
+            pass
+        return inserted
+    elif src == "generic_api":
+        inserted, _ = import_generic_api_emails(records)
+        return inserted
+    elif src == "imap":
+        inserted, _ = import_imap_emails(records)
+        return inserted
+    elif src == "uned":
+        inserted, _ = import_uned_emails(records)
+        return inserted
+    return 0
+

@@ -45,7 +45,7 @@ def _generate_random_username() -> str:
 def fetch_latest_udio_magic_link(
     email: str,
     after_ts: float | None = None,
-    max_wait: int = 60,
+    max_wait: int = 120,
     poll_interval: int = 3,
 ) -> str:
     """通过 Graph API 轮询收件箱并抽取 Udio Magic Link 确认链接。"""
@@ -64,9 +64,9 @@ def fetch_latest_udio_magic_link(
             subj = str(item.get("subject") or "").lower()
             sender = str(item.get("from") or "").lower()
             sender_name = str(item.get("fromName") or "").lower()
-            body_txt = str(item.get("bodyText") or "")
-            body_html = str(item.get("bodyHtml") or "")
-            full_body = f"{body_txt}\n{body_html}"
+            body_txt = str(item.get("bodyText") or item.get("body") or item.get("content") or item.get("bodyPreview") or "")
+            body_html = str(item.get("bodyHtml") or item.get("html") or item.get("body") or "")
+            full_body = f"{subj}\n{body_txt}\n{body_html}"
 
             # 匹配 Udio 确认邮件
             if any(k in subj for k in ("confirm your signup", "confirm", "udio", "magic link")) or \
@@ -98,13 +98,33 @@ class UdioRegistrationFlow(BaseRegistrationFlow):
         driver.get("https://www.udio.com")
         time.sleep(5)
 
-        # 清除 Cookie 弹窗并点击 Sign In
+        # 等待 React 单页应用挂载就绪
+        try:
+            driver.page.wait_for_selector('button', timeout=15000)
+        except Exception:
+            pass
+
+        # 清除 Cookie 弹窗
+        try:
+            accept_btn = driver.page.locator('button:has-text("ACCEPT ALL")')
+            if accept_btn.count() > 0 and accept_btn.first.is_visible():
+                accept_btn.first.click()
+                time.sleep(1)
+        except Exception:
+            pass
+
+        # 显式点击 Sign In
+        try:
+            sign_in_btn = driver.page.locator('button:has-text("Sign In"), button:has-text("Sign in"), a:has-text("Sign In")')
+            if sign_in_btn.count() > 0 and sign_in_btn.first.is_visible():
+                sign_in_btn.first.click()
+                time.sleep(2)
+        except Exception:
+            pass
+
         driver.page.evaluate('''() => {
-            const acceptBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').includes('ACCEPT ALL'));
-            if (acceptBtn) acceptBtn.click();
             const banner = document.querySelector('#cookiescript_injected');
             if (banner) banner.remove();
-
             const signBtn = Array.from(document.querySelectorAll('button, a')).find(el => (el.innerText || '').trim().toLowerCase() === 'sign in');
             if (signBtn) signBtn.click();
         }''')
@@ -112,20 +132,31 @@ class UdioRegistrationFlow(BaseRegistrationFlow):
 
         # 2. 填写邮箱并请求 Magic Link
         logger.info("[2/5] 填充邮箱并触发 Magic Link...")
-        driver.page.locator('input[type="email"]').fill(email)
+        email_inp = 'input[type="email"], input[name="email"], input[placeholder*="email" i]'
+        driver.page.wait_for_selector(email_inp, timeout=15000)
+        inp_el = driver.page.locator(email_inp).first
+        inp_el.click()
+        inp_el.fill(email)
+        time.sleep(1)
+        inp_el.press("Enter")
         time.sleep(1)
 
-        driver.page.locator('button:has-text("Continue with email")').click()
+        try:
+            continue_btn = driver.page.locator('button:has-text("Continue with email")')
+            if continue_btn.count() > 0 and continue_btn.first.is_visible():
+                continue_btn.first.click()
+        except Exception:
+            pass
         time.sleep(3)
 
         # 3. 轮询收信并获取 Magic Link
         logger.info("[3/5] 轮询收件箱获取 Udio Magic Link...")
-        magic_link = fetch_latest_udio_magic_link(email, after_ts=start_ts, max_wait=60)
+        magic_link = fetch_latest_udio_magic_link(email, after_ts=start_ts, max_wait=120)
 
         # 4. 访问确认链接并点击 Confirm
         logger.info("[4/5] 访问确认链接并完成会话确权...")
         driver.get(magic_link)
-        time.sleep(4)
+        time.sleep(5)
 
         driver.page.evaluate('''() => {
             const acceptBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').includes('ACCEPT ALL'));
@@ -136,6 +167,12 @@ class UdioRegistrationFlow(BaseRegistrationFlow):
             const confirmBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').trim().toLowerCase() === 'confirm');
             if (confirmBtn) confirmBtn.click();
         }''')
+        try:
+            conf_btn = driver.page.locator('button:has-text("Confirm"), button:has-text("CONFIRM")')
+            if conf_btn.count() > 0 and conf_btn.first.is_visible():
+                conf_btn.first.click()
+        except Exception:
+            pass
         time.sleep(5)
 
         # 5. 处理档案初始化 (Create Your Profile)
@@ -259,11 +296,13 @@ def pick_available_udio_account(
 
 def register_single_udio_account(
     account_info: Dict[str, Any],
-    proxy: str = "http://127.0.0.1:7890",
+    proxy: str = "",
     headless: bool = True,
     db_path: Path | str | None = None,
 ) -> Dict[str, Any]:
     """全自动完成单只 Udio 账号注册、Magic Link 确权与凭据提取。"""
+    if proxy and proxy.lower() in ("direct", "none", "local"):
+        proxy = ""
     flow = UdioRegistrationFlow(db_path=db_path)
     res = flow.run(account_info=account_info, proxy=proxy, headless=headless)
     if res.ok:
@@ -285,11 +324,13 @@ def register_single_udio_account(
 def register_batch_udio_accounts(
     count: int = 1,
     specific_email: Optional[str] = None,
-    proxy: str = "http://127.0.0.1:7890",
+    proxy: str = "",
     headless: bool = True,
     db_path: Path | str | None = None,
 ) -> List[Dict[str, Any]]:
     """批量自动化注册 Udio 账号并推送到网关。"""
+    if proxy and proxy.lower() in ("direct", "none", "local"):
+        proxy = ""
     p = Path(db_path or DB_PATH)
     init_udio_db(p)
 

@@ -1,0 +1,87 @@
+[tool.poetry]
+name = "oxymouse"
+version = "1.1.1"
+description = "Oxymouse is a tool for generating synthetic mouse movements."
+authors = ["Tadas Gedgaudas <tadas.gedgaudas@oxylabs.io>"]
+readme = "README.md"
+packages = [{ include = "oxymouse" }]
+
+[project]
+name = "oxymouse"
+description = "Oxy®Mouse - algorithms for generating mouse movements!"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Tadas Gedgaudas", email = "tadas.gedgaudas@oxylabs.io" },
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://oxylabs.io"
+Documentation = "https://github.com/oxylabs/OxyMouse/blob/master/README.md"
+Repository = "https://github.com/oxylabs/OxyMouse"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyhm = "~0.0.7"
+noise = "~1.2.2"
+matplotlib = "~3.9.2"
+typer = "^0.12.5"
+
+[tool.poetry.dev-dependencies]
+ruff = "~0.6.7"
+pylint = "~3.3.1"
+mypy = "~1.11.2"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",  # Pyflakes
+    "UP",  # pyupgrade
+    "SIM",  # flake8-simplify
+    "I",  # isort
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.mypy]
+ignore_missing_imports = true
+warn_unused_configs = true
+disallow_any_generics = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+
+[tool.pylint]
+[tool.pylint.'MASTER']
+extension-pkg-allow-list='pydantic'
+
+[tool.pylint.'MESSAGES CONTROL']
+disable=[
+    "missing-docstring"
+]
+
+[tool.pylint.'FORMAT']
+max-line-length = 120
+
+[tool.pylint.'SIMILARITIES']
+ignore-imports = 'yes'
+min-similarity-lines = 15
+
+[tool.pylint.'DESIGN']
+max-args=10
+
+[tool.hatch.version]
+path = "oxymouse/__init__.py"
+
+[build-system]
+requires = ["hatchling >= 1.7.0"]
+build-backend = "hatchling.build"

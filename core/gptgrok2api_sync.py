@@ -33,9 +33,29 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-GPTGROK2API_URL = os.environ.get("GPTGROK2API_URL", "http://127.0.0.1:3010/api/accounts/import-api")
-GPTGROK2API_KEY = os.environ.get("GPTGROK2API_KEY", "")
-GPTGROK2API_DATA_FILE = Path(os.environ.get("GPTGROK2API_DATA_FILE", "accounts.json"))
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent.parent / ".env"
+    if _env_file.exists():
+        load_dotenv(_env_file)
+except Exception:
+    pass
+
+GPTGROK2API_URL = os.environ.get("GPTGROK2API_URL", "http://4.193.130.57:3010/api/accounts/import-api,http://127.0.0.1:3010/api/accounts/import-api")
+GPTGROK2API_KEY = os.environ.get("GPTGROK2API_KEY", "adm-e0de3f869d944ea0868921a36d03d8a9")
+
+
+def get_target_api_urls() -> list[str]:
+    """获取所有配置的 gptGrok2api 接口推送地址（支持逗号分隔的多端广播同步）。"""
+    raw = os.environ.get("GPTGROK2API_URL", "http://4.193.130.57:3010/api/accounts/import-api,http://127.0.0.1:3010/api/accounts/import-api")
+    return [u.strip() for u in raw.split(",") if u.strip()]
+
+_data_file_candidate = Path(os.environ.get("GPTGROK2API_DATA_FILE", "F:/github/gptGrok2api/data/accounts.json"))
+if not _data_file_candidate.exists():
+    _fallback_data = Path("F:/github/gptGrok2api/data/accounts.json")
+    if _fallback_data.exists():
+        _data_file_candidate = _fallback_data
+GPTGROK2API_DATA_FILE = _data_file_candidate
 
 # 分组常量
 GROUP_ID_ASIA = "group-19mezl"     # 亚洲 (对应代理组 pg-1c59d0035c)
@@ -79,6 +99,35 @@ def map_country_to_group_id(country: str | None, proxy_used: str | None = None) 
 
     # 3. 缺省兜底为美洲代理组
     return GROUP_ID_AMERICAS
+
+
+def format_proxy_for_gptgrok2api(
+    proxy_val: str | None,
+    country: str | None = None,
+    acc_id: Any = None,
+    email: str | None = None,
+    resin_token: str | None = None,
+) -> str:
+    """
+    格式化代理地址供 GPTGrok2API 使用：
+    1. 过滤本地临时动态住宅转发端口（如 127.0.0.1:28888 或包含 28888 的临时中转代理），
+       因为注册结束后该本地端口关闭，必须安全回退至 Resin 分国稳定代理；
+    2. 将宿主机 127.0.0.1:2260 / localhost:2260 转换为 Docker 内部网络 host.docker.internal:2260；
+    3. 若原代理为空，则根据国家代码与账号 ID 自动生成 Resin 专属会话代理。
+    """
+    token = resin_token or os.environ.get("RESIN_PROXY_TOKEN", "resin_proxy_c3d7b8e1f0a2496582d9183b")
+    p = str(proxy_val or "").strip()
+
+    # 命中临时端口 28888 或为空，回退到对应国家的持久 Resin 代理
+    if not p or "28888" in p:
+        c = str(country or "US").strip().upper()
+        if not c or len(c) > 8:
+            c = "US"
+        num_id = acc_id or (abs(hash(email or "acc")) % 1000 + 1)
+        return f"http://{c}.sess_{num_id}:{token}@host.docker.internal:2260"
+
+    return p.replace("127.0.0.1:2260", "host.docker.internal:2260").replace("localhost:2260", "host.docker.internal:2260")
+
 
 
 def _get_sqlite_conn() -> sqlite3.Connection:
@@ -127,6 +176,19 @@ def _extract_account_info(row_dict: dict) -> dict:
 
     group_id = map_country_to_group_id(country, proxy_used)
 
+    live_status = str(payload.get("live_check_status") or row_dict.get("status") or "").lower()
+    live_err = str(payload.get("live_check_error") or "").lower()
+    warm_err = str(payload.get("warming_error") or "").lower()
+    is_deactivated = (
+        live_status == "deactivated"
+        or "deactivated" in warm_err
+        or "deactivated" in live_err
+        or "token_revoked" in live_err
+        or "account_deactivated" in live_err
+    )
+    acc_status = "异常" if is_deactivated else "正常"
+    is_enabled = not is_deactivated
+
     return {
         "id": row_dict.get("id") or payload.get("id"),
         "email": email,
@@ -134,9 +196,9 @@ def _extract_account_info(row_dict: dict) -> dict:
         "login_password": password,
         "two_factor_secret": totp_secret,
         "group_id": group_id,
-        "status": "正常",
+        "status": acc_status,
         "source_type": "web",
-        "enabled": True,
+        "enabled": is_enabled,
         "default_model_slug": "auto",
         "country": country,
         "proxy_used": proxy_used,
@@ -188,73 +250,146 @@ def push_accounts_to_gptgrok2api(accounts: list[dict]) -> dict:
         return {"ok": True, "added": 0, "skipped": 0, "message": "无待推送账号"}
 
     clean_payloads = []
+    resin_token = os.environ.get("RESIN_PROXY_TOKEN", "resin_proxy_c3d7b8e1f0a2496582d9183b")
     for acc in accounts:
+        proxy_val = format_proxy_for_gptgrok2api(
+            proxy_val=acc.get("proxy_used") or acc.get("proxy"),
+            country=acc.get("country"),
+            acc_id=acc.get("id"),
+            email=acc.get("email"),
+            resin_token=resin_token,
+        )
+
+        acc_status = acc.get("status") or "正常"
+        acc_enabled = acc.get("enabled", True) if "enabled" in acc else (acc_status == "正常")
+
         item = {
             "email": acc["email"],
             "access_token": acc["access_token"],
             "login_password": acc.get("login_password") or "",
             "two_factor_secret": acc.get("two_factor_secret") or "",
-            "group_id": acc.get("group_id") or GROUP_ID_AMERICAS,
-            "status": "正常",
+            "group_id": acc.get("group_id") or map_country_to_group_id(acc.get("country"), proxy_val),
+            "country": acc.get("country") or "",
+            "proxy": proxy_val,
+            "status": acc_status,
             "source_type": "web",
-            "enabled": True,
+            "enabled": acc_enabled,
             "default_model_slug": "auto",
         }
         clean_payloads.append(item)
 
-    # 1. 尝试 HTTP API 推送
+    # 1. 尝试 HTTP API 推送 (多端广播同步：云端与本地)
     http_success = False
     result_data = {}
-    try:
-        resp = requests.post(
-            GPTGROK2API_URL,
-            headers={
-                "X-API-Key": GPTGROK2API_KEY,
-                "Content-Type": "application/json",
-            },
-            json={"accounts": clean_payloads},
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            result_data = resp.json()
-            http_success = True
-            logger.info(
-                "[gptGrok2api] HTTP 接口推送成功: added=%s, skipped=%s",
-                result_data.get("added"),
-                result_data.get("skipped"),
-            )
-        else:
-            logger.warning("[gptGrok2api] HTTP 接口返回异常: %s %s", resp.status_code, resp.text[:200])
-    except Exception as exc:
-        logger.warning("[gptGrok2api] HTTP 接口连接失败，尝试回退本地文件写入: %s", exc)
+    emails = [acc["email"] for acc in clean_payloads if acc.get("email")]
+    target_urls = get_target_api_urls()
 
-    # 2. 若 HTTP API 未成功，回退到写入 accounts.json 文件
-    if not http_success:
+    for api_url in target_urls:
+        del_url = api_url.replace("/api/accounts/import-api", "/api/accounts")
+        # 1.1 先清理旧账号记录（防 stale token / 401 异常残留）
+        if emails and GPTGROK2API_KEY:
+            try:
+                requests.delete(
+                    del_url,
+                    headers={
+                        "X-API-Key": GPTGROK2API_KEY,
+                        "Authorization": f"Bearer {GPTGROK2API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"tokens": emails},
+                    timeout=5,
+                )
+            except Exception as del_err:
+                logger.debug("[gptGrok2api] 清理旧 token 记录跳过或异常 (%s): %s", api_url, del_err)
+
+        # 1.2 导入最新账号凭证与状态
         try:
-            if GPTGROK2API_DATA_FILE.exists():
-                existing = json.loads(GPTGROK2API_DATA_FILE.read_text(encoding="utf-8"))
-                by_token = {item.get("access_token"): idx for idx, item in enumerate(existing) if item.get("access_token")}
-                added, skipped = 0, 0
-                for item in clean_payloads:
-                    tok = item.get("access_token")
-                    if tok in by_token:
-                        # 更新已有记录
-                        idx = by_token[tok]
-                        existing[idx].update(item)
-                        skipped += 1
-                    else:
-                        item["created_at"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-                        existing.append(item)
-                        by_token[tok] = len(existing) - 1
-                        added += 1
-                GPTGROK2API_DATA_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
-                result_data = {"added": added, "skipped": skipped, "mode": "direct_file"}
-                logger.info("[gptGrok2api] 本地 accounts.json 写入成功: added=%s, skipped=%s", added, skipped)
+            resp = requests.post(
+                api_url,
+                headers={
+                    "X-API-Key": GPTGROK2API_KEY,
+                    "Authorization": f"Bearer {GPTGROK2API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={"accounts": clean_payloads},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                result_data = resp.json()
+                http_success = True
+                logger.info(
+                    "[gptGrok2api] HTTP 接口 (%s) 推送成功: added=%s, skipped=%s",
+                    api_url,
+                    result_data.get("added"),
+                    result_data.get("skipped"),
+                )
+                # 1.3 额外通过 update 接口兜底确保每个账号的 status 都是正常且 enabled=True
+                if GPTGROK2API_KEY:
+                    update_url = api_url.replace("/api/accounts/import-api", "/api/accounts/update")
+                    for acc in clean_payloads:
+                        try:
+                            requests.post(
+                                update_url,
+                                headers={
+                                    "X-API-Key": GPTGROK2API_KEY,
+                                    "Authorization": f"Bearer {GPTGROK2API_KEY}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={
+                                    "access_token": acc["email"],
+                                    "status": acc.get("status", "正常"),
+                                    "enabled": acc.get("enabled", True),
+                                },
+                                timeout=3,
+                            )
+                        except Exception:
+                            pass
             else:
-                return {"ok": False, "error": f"API 无法连接且数据文件不存在: {GPTGROK2API_DATA_FILE}"}
-        except Exception as file_exc:
-            logger.exception("[gptGrok2api] 写入本地 accounts.json 失败: %s", file_exc)
-            return {"ok": False, "error": str(file_exc)}
+                logger.warning("[gptGrok2api] HTTP 接口 (%s) 返回异常: %s %s", api_url, resp.status_code, resp.text[:200])
+        except Exception as exc:
+            logger.warning("[gptGrok2api] HTTP 接口 (%s) 连接失败: %s", api_url, exc)
+
+    # 2. 同时原子同步写入本地 accounts.json 文件（保证双重落盘一致性）
+    try:
+        if GPTGROK2API_DATA_FILE.exists():
+            existing = json.loads(GPTGROK2API_DATA_FILE.read_text(encoding="utf-8"))
+            by_email = {str(item.get("email") or "").strip().lower(): idx for idx, item in enumerate(existing) if item.get("email")}
+            by_token = {item.get("access_token"): idx for idx, item in enumerate(existing) if item.get("access_token")}
+            added, updated = 0, 0
+            for item in clean_payloads:
+                em = str(item.get("email") or "").strip().lower()
+                tok = item.get("access_token")
+                target_idx = by_email.get(em) if em else by_token.get(tok)
+                is_en = item.get("enabled", True)
+                if target_idx is not None:
+                    # 更新已有记录
+                    existing[target_idx].update(item)
+                    existing[target_idx]["status"] = item.get("status", "正常")
+                    existing[target_idx]["enabled"] = is_en
+                    existing[target_idx]["disabled"] = not is_en
+                    if is_en:
+                        existing[target_idx]["fail"] = 0
+                        existing[target_idx]["failure_count"] = 0
+                        existing[target_idx]["error"] = None
+                        existing[target_idx]["last_error"] = None
+                        existing[target_idx]["last_error_message"] = None
+                        existing[target_idx]["last_error_status"] = None
+                    updated += 1
+                else:
+                    item["created_at"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                    existing.append(item)
+                    if em:
+                        by_email[em] = len(existing) - 1
+                    if tok:
+                        by_token[tok] = len(existing) - 1
+                    added += 1
+            GPTGROK2API_DATA_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+            if not http_success:
+                result_data = {"added": added, "updated": updated, "mode": "direct_file"}
+            logger.info("[gptGrok2api] accounts.json 写入成功: added=%s, updated=%s", added, updated)
+    except Exception as file_exc:
+        logger.warning("[gptGrok2api] 写入本地 accounts.json 异常: %s", file_exc)
+
 
     # 3. 标记 SQLite 账号为已同步
     synced_ids = [acc["id"] for acc in accounts if acc.get("id")]
@@ -319,3 +454,183 @@ def sync_all_registered_accounts(force: bool = True) -> dict:
                 return {"ok": True, "added": 0, "skipped": 0, "message": "没有需要同步的账号"}
             logger.info("[gptGrok2api] 开始全量/补推同步，共 %d 个账号...", len(accounts))
             return push_accounts_to_gptgrok2api(accounts)
+
+
+def push_grok_accounts_to_gptgrok2api(grok_accounts: list[dict[str, Any]]) -> dict:
+    """将 Grok (x.ai) 账号格式化并推送到 gptGrok2api 接口或写入 accounts.json。"""
+    if not grok_accounts:
+        return {"ok": True, "added": 0, "skipped": 0, "message": "账号列表为空"}
+
+    clean_payloads = []
+    account_ids = []
+
+    for acc in grok_accounts:
+        acc_id = acc.get("id")
+        if acc_id:
+            account_ids.append(int(acc_id))
+
+        proxy_val = format_proxy_for_gptgrok2api(
+            proxy_val=acc.get("proxy_used") or acc.get("proxy"),
+            country=acc.get("country"),
+            acc_id=acc_id,
+            email=acc.get("email"),
+            resin_token=os.environ.get("RESIN_PROXY_TOKEN", "resin_proxy_c3d7b8e1f0a2496582d9183b"),
+        )
+
+        # 优先使用 sso_token (Grok2API 支持格式)，若有 refresh_token 也记录在 extra
+        primary_token = str(acc.get("sso_token") or acc.get("refresh_token") or acc.get("access_token") or "").strip()
+        if primary_token.startswith("sso="):
+            primary_token = primary_token[4:].strip()
+
+        group_id = map_country_to_group_id(acc.get("country"), proxy_val)
+        is_healthy = str(acc.get("status") or "").lower() == "healthy"
+
+        item = {
+            "email": acc["email"],
+            "access_token": primary_token,
+            "login_password": acc.get("password") or "",
+            "two_factor_secret": "",
+            "group_id": group_id,
+            "country": acc.get("country") or "",
+            "proxy": proxy_val,
+            "status": "正常" if is_healthy else "降智/受限",
+            "source_type": "grok",
+            "enabled": is_healthy,
+            "default_model_slug": "grok-3",
+        }
+        clean_payloads.append(item)
+
+    # 1. 尝试调用 HTTP 接口推送 (多端广播同步：云端与本地)
+    http_success = False
+    result_data = {}
+    emails = [acc["email"] for acc in clean_payloads if acc.get("email")]
+    target_urls = get_target_api_urls()
+
+    for api_url in target_urls:
+        del_url = api_url.replace("/api/accounts/import-api", "/api/accounts")
+        # 1.1 先清理旧账号记录
+        if emails and GPTGROK2API_KEY:
+            try:
+                requests.delete(
+                    del_url,
+                    headers={
+                        "X-API-Key": GPTGROK2API_KEY,
+                        "Authorization": f"Bearer {GPTGROK2API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"tokens": emails},
+                    timeout=5,
+                )
+            except Exception as del_err:
+                logger.debug("[gptGrok2api] 清理旧 Grok 账号记录跳过或异常 (%s): %s", api_url, del_err)
+
+        # 1.2 导入最新 Grok 账号凭据
+        try:
+            resp = requests.post(
+                api_url,
+                headers={
+                    "X-API-Key": GPTGROK2API_KEY,
+                    "Authorization": f"Bearer {GPTGROK2API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={"accounts": clean_payloads},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                result_data = resp.json()
+                http_success = True
+                logger.info(
+                    "[gptGrok2api] Grok 账号 HTTP 接口 (%s) 推送成功: added=%s, skipped=%s",
+                    api_url,
+                    result_data.get("added"),
+                    result_data.get("skipped"),
+                )
+            else:
+                logger.warning("[gptGrok2api] HTTP 接口 (%s) 返回异常: %s %s", api_url, resp.status_code, resp.text[:200])
+        except Exception as exc:
+            logger.warning("[gptGrok2api] HTTP 接口 (%s) 连接失败: %s", api_url, exc)
+
+    # 2. 如果 HTTP 接口不可用，回退写入 accounts.json
+    if not http_success:
+        try:
+            existing = []
+            if GPTGROK2API_DATA_FILE.exists():
+                existing = json.loads(GPTGROK2API_DATA_FILE.read_text(encoding="utf-8"))
+            existing_by_email = {a.get("email"): i for i, a in enumerate(existing) if a.get("email")}
+            added = 0
+            updated = 0
+            for item in clean_payloads:
+                em = item["email"]
+                if em in existing_by_email:
+                    existing[existing_by_email[em]].update(item)
+                    updated += 1
+                else:
+                    existing.append(item)
+                    added += 1
+            GPTGROK2API_DATA_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+            result_data = {"ok": True, "added": added, "updated": updated, "fallback_file": True}
+        except Exception as file_exc:
+            logger.warning("[gptGrok2api] 写入本地 accounts.json 异常: %s", file_exc)
+            return {"ok": False, "error": f"HTTP 与本地写入均失败: {file_exc}"}
+
+    # 2.2 始终同步写入 grok_accounts.json (驱动 GPTGrok2API 控制台的「Grok」专用账号管理 Tab)
+    try:
+        grok_file = GPTGROK2API_DATA_FILE.parent / "grok_accounts.json"
+        existing_grok = []
+        if grok_file.exists():
+            try:
+                existing_grok = json.loads(grok_file.read_text(encoding="utf-8"))
+            except Exception:
+                existing_grok = []
+        grok_by_email = {str(a.get("email") or "").lower(): i for i, a in enumerate(existing_grok) if a.get("email")}
+        now_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        for item in clean_payloads:
+            em = str(item.get("email") or "").strip()
+            if not em:
+                continue
+            key = em.lower()
+            acc_id = str(item.get("id") or f"grok-{int(time.time()*1000)}")
+            if not acc_id.startswith("grok-"):
+                acc_id = f"grok-{acc_id}"
+            oauth_state = None
+            if item.get("access_token"):
+                oauth_state = {
+                    "status": "authorized",
+                    "attempted_at": now_str,
+                    "error": "",
+                    "attempts": 1,
+                }
+            entry = {
+                "id": acc_id,
+                "email": em,
+                "password": item.get("login_password") or item.get("password") or "",
+                "sso": item.get("access_token") or item.get("sso_token") or "",
+                "access_token": item.get("access_token") or "",
+                "refresh_token": item.get("refresh_token") or "",
+                "status": "active",
+                "enabled": True,
+                "source_type": "protocol",
+                "created_at": item.get("created_at") or now_str,
+                "updated_at": now_str,
+            }
+            if oauth_state:
+                entry["oauth_authorization"] = oauth_state
+            if key in grok_by_email:
+                existing_grok[grok_by_email[key]].update(entry)
+            else:
+                grok_by_email[key] = len(existing_grok)
+                existing_grok.append(entry)
+        grok_file.write_text(json.dumps(existing_grok, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as grok_file_exc:
+        logger.warning("[gptGrok2api] 同步 grok_accounts.json 异常: %s", grok_file_exc)
+
+    # 3. 标记数据库中 Grok 账号已同步
+    if account_ids:
+        try:
+            from core.db.grok import mark_grok_accounts_synced
+            mark_grok_accounts_synced(account_ids)
+        except Exception as db_err:
+            logger.warning("[gptGrok2api] 标记 Grok 账号同步状态异常: %s", db_err)
+
+    return {"ok": True, "data": result_data, "count": len(clean_payloads)}
+

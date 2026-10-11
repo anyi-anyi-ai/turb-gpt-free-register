@@ -220,6 +220,9 @@ app.include_router(network.router)
 app.include_router(mailpool.router)
 app.include_router(maintenance.router)
 
+from core.live_browser_hub import mount_live_routes
+mount_live_routes(app)
+
 
 # 运行中的任务：run_id -> {proc, lines:[], done:bool, script, cmd, started}
 RUNS = {}
@@ -2317,6 +2320,14 @@ def api_mailpool_get():
             line = line.strip()
             if line and not line.startswith("#"):
                 total += 1
+    if total == 0:
+        try:
+            from core import db
+            sync_fn = getattr(db, "sync_email_pool_to_emails_txt", None)
+            if sync_fn:
+                total = sync_fn(EMAILS_FILE)
+        except Exception:
+            pass
     return {"total": total}
 
 
@@ -2353,6 +2364,25 @@ async def api_mailpool_import(request: Request):
             if need_nl:
                 f.write("\n")
             f.write("\n".join(out_lines) + "\n")
+        # 同步写入 SQLite email_pool
+        try:
+            from core import db
+            db_records = []
+            for ln in out_lines:
+                parts = ln.split("----")
+                if len(parts) >= 1:
+                    db_records.append({
+                        "email": parts[0].strip(),
+                        "password": parts[1].strip() if len(parts) > 1 else "",
+                        "refresh_token": parts[2].strip() if len(parts) > 2 else "",
+                        "client_id": parts[3].strip() if len(parts) > 3 else "",
+                    })
+            if db_records:
+                import_fn = getattr(db, "import_email_pool", None)
+                if import_fn:
+                    import_fn("outlook", db_records)
+        except Exception:
+            pass
     total = len(_existing_emails())
     return {"ok": True, "added": added, "skipped": skipped, "bad": bad,
             "bad_samples": bad_samples, "total": total}
@@ -3743,3 +3773,5 @@ async def shutdown_local_services():
 _ensure_proxy_env()
 app.mount("/static", StaticFiles(directory=os.path.join(WEBUI, "static")), name="static")
 app.mount("/assets", StaticFiles(directory=os.path.join(ROOT, "assets")), name="assets")
+
+

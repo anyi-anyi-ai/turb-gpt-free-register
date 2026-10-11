@@ -6,7 +6,7 @@
 参数来源：CLIProxyAPI 源码 internal/auth/codex/openai_auth.go + pkce.go，
 对照 https://github.com/router-for-me/CLIProxyAPI 逐行确认。
 """
-from config.env_loader import env_str, apply_env_overrides
+from config.env_loader import env_str, env_int, env_list, apply_env_overrides
 
 
 # 是否启用 Codex OAuth 授权（False = 跳过，不影响注册结果）
@@ -91,12 +91,22 @@ CPA_SAVE_CALLBACK_RECEIPT: bool = True
 # ============================================================
 # 接码平台（手机短信验证用）
 # SMS_PROVIDER:
+#   "vak"     = VAK-SMS，支持全国家自动最低价比对、单国多号重试、顺延次低价国家
 #   "grizzly" = GrizzlySMS，接口说明见 https://api.grizzlysms.com
 #   "l"       = 本地 L 取号服务，接口说明见 L_API.md
 #   "h"       = 本地 H 取号服务，接口说明见 H_API.md
 # ============================================================
 
 SMS_PROVIDER: str = "l"
+
+# VAK-SMS 平台核心配置
+VAK_SMS_API_KEY: str = env_str("VAK_SMS_API_KEY", "")
+VAK_SMS_BASE_URL: str = env_str("VAK_SMS_BASE_URL", "https://vak-sms.com")
+VAK_MAX_RETRIES_PER_COUNTRY: int = env_int("VAK_MAX_RETRIES_PER_COUNTRY", 5)
+VAK_MAX_COUNTRY_HOPS: int = env_int("VAK_MAX_COUNTRY_HOPS", 5)
+VAK_SMS_TIMEOUT: int = env_int("VAK_SMS_TIMEOUT", 90)
+VAK_MAX_PRICE: str = env_str("VAK_MAX_PRICE", "")
+VAK_COUNTRY_BLACKLIST: list[str] = env_list("VAK_COUNTRY_BLACKLIST", [])
 
 # 接码 API 基址（GET handler）
 SMS_API_BASE: str = "https://api.grizzlysms.com/stubs/handler_api.php"

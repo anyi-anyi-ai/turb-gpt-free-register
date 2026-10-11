@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+# 专属于 turb-gpt-free-register 的独立中转与多订阅容灾配置
+# 严格独立监听内部端口，严禁接触或使用宿主机个人日常代理端口 (如 7890)
+
+mixed-port: 28890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+
+dns:
+  enable: true
+  listen: 127.0.0.1:28853
+  enhanced-mode: fake-ip
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 8.8.8.8
+
+# 1. 内置 88.88 高速跳板 (Resin 节点)
+proxies:
+  - name: "Resin-88.88-Primary"
+    type: http
+    server: 127.0.0.1
+    port: 2260
+    username: "FAST_UPSTREAM"
+    password: "resin_proxy_c3d7b8e1f0a2496582d9183b"
+
+# 2. 外部多订阅容灾储备池 (支持随时动态添加新订阅)
+proxy-providers:
+  mcii-subscription:
+    type: http
+    url: "https://proxy.mcii.cc/sub/617238894e43a32f47361a5f271c4308"
+    path: ./data/relay_providers/mcii_sub.yaml
+    interval: 3600
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+
+# 3. 自动故障转移与测速策略组 (首选 88.88，故障时毫秒级切至订阅节点)
+proxy-groups:
+  - name: "AUTO-RELAY"
+    type: fallback
+    url: "http://www.gstatic.com/generate_204"
+    interval: 180
+    proxies:
+      - "Resin-88.88-Primary"
+    use:
+      - mcii-subscription
+
+rules:
+  - MATCH,AUTO-RELAY

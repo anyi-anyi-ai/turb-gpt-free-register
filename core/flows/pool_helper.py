@@ -64,13 +64,26 @@ def pick_unregistered_email_for_platform(
             }
 
         # 查找不在该平台表中的可用邮箱
-        query = f"""
-            SELECT ep.email, ep.payload
-            FROM email_pool ep
-            WHERE LOWER(ep.email) NOT IN (SELECT LOWER(email) FROM {platform_table})
-            ORDER BY ep.id ASC
-            LIMIT 50;
-        """
+        if platform_table == "suno_accounts":
+            query = f"""
+                SELECT ep.email, ep.payload
+                FROM email_pool ep
+                WHERE (ep.email LIKE '%@outlook.com' OR ep.email LIKE '%@hotmail.com')
+                  AND json_extract(ep.payload, '$.password') NOT IN ('x', '', 'None')
+                  AND json_extract(ep.payload, '$.password') IS NOT NULL
+                  AND LOWER(ep.email) NOT IN (SELECT LOWER(email) FROM {platform_table} WHERE status = 'active')
+                ORDER BY ep.id ASC
+                LIMIT 50;
+            """
+        else:
+            query = f"""
+                SELECT ep.email, ep.payload
+                FROM email_pool ep
+                WHERE ep.status = 'available'
+                  AND LOWER(ep.email) NOT IN (SELECT LOWER(email) FROM {platform_table} WHERE status = 'active')
+                ORDER BY ep.id ASC
+                LIMIT 50;
+            """
         rows = conn.execute(query).fetchall()
 
         for row in rows:

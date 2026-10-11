@@ -172,7 +172,7 @@ def _account_registration_password(email: str) -> str:
                 extra = {}
         elif isinstance(extra_raw, dict):
             extra = extra_raw
-        return str(extra.get("registration_password") or acc.get("registration_password") or "").strip()
+        return str(extra.get("registration_password") or acc.get("registration_password") or acc.get("password") or "").strip()
     except Exception:
         return ""
 
@@ -1423,8 +1423,10 @@ def run_codex_oauth(
         if oauth_driver in ("cloak", "cloakbrowser"):
             from config import cloakbrowser as _cloak_cfg
             from core.cloakbrowser_driver import build_cloak_driver
+            from core.fingerprint import derive_account_fingerprint_seed
             from core.roxy_codex_oauth import run_roxy_codex_oauth
-            driver, opened = build_cloak_driver(proxy=proxy)
+            fp_seed = derive_account_fingerprint_seed(email)
+            driver, opened = build_cloak_driver(proxy=proxy, fingerprint_seed=fp_seed)
             try:
                 return run_roxy_codex_oauth(
                     email,

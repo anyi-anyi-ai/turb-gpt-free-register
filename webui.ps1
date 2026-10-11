@@ -1,4 +1,4 @@
-﻿# Turb GPT Free Register WebUI Windows 管理脚本 (PowerShell)
+# Turb GPT Free Register WebUI Windows 管理脚本 (PowerShell)
 #
 # 用法：
 #   .\webui.ps1 start      启动 WebUI (后台运行)
@@ -86,6 +86,16 @@ function Start-WebUI {
     if (-not $proc.HasExited) {
         Write-Host "启动成功！PID=$($proc.Id)" -ForegroundColor Green
         Write-Host "访问地址：http://${HostAddress}:${Port}" -ForegroundColor Green
+        
+        # 联动启动 Azure 自愈反向穿透隧道 (若云端存活)
+        $tunnelScript = Join-Path $RootDir "cloud_tunnel_selfheal.ps1"
+        if (Test-Path $tunnelScript) {
+            $existingTunnel = Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" | Where-Object { $_.CommandLine -like "*5005:127.0.0.1:5005*" }
+            if (-not $existingTunnel) {
+                Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tunnelScript`"" -WindowStyle Hidden
+                Write-Host "已在后台启动 Azure 自愈反向穿透隧道 (端口 5005)" -ForegroundColor Green
+            }
+        }
     } else {
         Write-Host "启动失败，请查看日志文件：$LogFile" -ForegroundColor Red
         if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
@@ -107,14 +117,19 @@ function Stop-WebUI {
     if (-not $proc) {
         Write-Host "WebUI 未在运行。" -ForegroundColor Yellow
         if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
-        return
+    } else {
+        Write-Host "正在关闭 WebUI (PID=$($proc.Id))..." -ForegroundColor Cyan
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
+        Write-Host "已关闭 WebUI。" -ForegroundColor Green
     }
 
-    Write-Host "正在关闭 WebUI (PID=$($proc.Id))..." -ForegroundColor Cyan
-    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
-    if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
-    Write-Host "已关闭 WebUI。" -ForegroundColor Green
+    # 同步清理自愈反向穿透隧道进程
+    Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" | Where-Object { $_.CommandLine -like "*5005:127.0.0.1:5005*" } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "已回收 Azure 自愈反向穿透隧道 (PID=$($_.ProcessId))" -ForegroundColor Gray
+    }
 }
 
 function Show-Status {

@@ -65,8 +65,8 @@ def fetch_latest_elevenlabs_verification_link(
     while time.time() < deadline:
         emails = _fetch_via(session, "graph", account)
         for item in emails:
-            body_txt = str(item.get("bodyText") or "")
-            body_html = str(item.get("bodyHtml") or "")
+            body_txt = str(item.get("bodyText") or item.get("body") or item.get("content") or item.get("bodyPreview") or "")
+            body_html = str(item.get("bodyHtml") or item.get("html") or item.get("body") or "")
             full_body = f"{body_txt}\n{body_html}"
 
             # 优先精确匹配含有 verifyEmail 与 oobCode 的 Firebase 激活链接
@@ -130,10 +130,17 @@ class ElevenLabsRegistrationFlow(BaseRegistrationFlow):
             time.sleep(3)
 
             # 3. 人机协作等待解决验证码
+            try:
+                from core.live_browser_hub import LiveBrowserHub
+                LiveBrowserHub.ensure_server(8799)
+                LiveBrowserHub.get_hub().attach_page(driver.page, auto_open=True)
+            except Exception as _ex:
+                logger.debug(f"LiveBrowser attach: {_ex}")
+
             print("\n" + "=" * 70, flush=True)
-            print("  【人机协作提示】注册机原生指纹浏览器 (CloakBrowser) 已在桌面弹出！", flush=True)
+            print("  【人机零侵入 Web 协同】实时视窗已在系统默认浏览器自动打开！", flush=True)
             print(f"  账号：{email}", flush=True)
-            print("  [*] 请在桌面弹出的浏览器窗口中央点击完成【镜子中翻转错误的图像】(镜像拼图)。", flush=True)
+            print("  [*] 地址：http://127.0.0.1:8799/live (可在网页画布中直接点击旋转拼图)", flush=True)
             print("  [*] 拼图完成后，后台将自动检测并立即继续激活入库！", flush=True)
             print("=" * 70 + "\n", flush=True)
 
@@ -154,7 +161,7 @@ class ElevenLabsRegistrationFlow(BaseRegistrationFlow):
                         for item in emails:
                             subj = str(item.get("subject") or "").lower()
                             sender = str(item.get("from") or "").lower()
-                            full_body = f"{item.get('bodyText') or ''}\n{item.get('bodyHtml') or ''}"
+                            full_body = f"{subj}\n{item.get('bodyText') or item.get('body') or item.get('content') or item.get('bodyPreview') or ''}\n{item.get('bodyHtml') or item.get('html') or ''}"
                             if any(k in subj for k in ("verify", "elevenlabs", "action required", "confirm your email")) or \
                                any(k in sender for k in ("elevenlabs", "team@elevenlabs")):
                                 matches = re.findall(r'https://[^\s"\'<>]*elevenlabs\.io[^\s"\'<>]+(?:verify|action|confirm)[^\s"\'<>]*', full_body)
@@ -185,6 +192,12 @@ class ElevenLabsRegistrationFlow(BaseRegistrationFlow):
                         break
                 except Exception:
                     pass
+
+            try:
+                from core.live_browser_hub import LiveBrowserHub
+                LiveBrowserHub.get_hub().detach_page()
+            except Exception:
+                pass
 
             if not captcha_solved:
                 logger.warning("[!] 暂未检测到明确的通关标记，尝试继续轮询邮件...")
@@ -462,11 +475,13 @@ def pick_available_elevenlabs_account(
 
 def register_single_elevenlabs_account(
     account_info: Dict[str, Any],
-    proxy: str = "http://127.0.0.1:7890",
+    proxy: str = "",
     headless: bool = False,
     db_path: Path | str | None = None,
     interactive_wait_timeout: int = 150,
 ) -> Dict[str, Any]:
+    if proxy and proxy.lower() in ("direct", "none", "local"):
+        proxy = ""
     """
     人机协作单号注册（直接使用注册机原生 CloakBrowser 指纹浏览器有头模式）：
       - 驱动：注册机原生 CloakBrowser 指纹对抗与出口代理
@@ -573,7 +588,7 @@ def register_batch_elevenlabs_accounts(
     count: int = 5,
     continuous: bool = False,
     specific_email: Optional[str] = None,
-    proxy: str = "http://127.0.0.1:7890",
+    proxy: str = "",
     headless: bool = False,
     db_path: Path | str | None = None,
 ) -> List[Dict[str, Any]]:
@@ -581,6 +596,8 @@ def register_batch_elevenlabs_accounts(
     批量/连续人机协作注册 ElevenLabs 账号：
     每个账号注册完成并确认入库后，自动关闭当前窗口，倒计时后平滑过渡至下一个账号。
     """
+    if proxy and proxy.lower() in ("direct", "none", "local"):
+        proxy = ""
     p = Path(db_path or DB_PATH)
     init_elevenlabs_db(p)
 

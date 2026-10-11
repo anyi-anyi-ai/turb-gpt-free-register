@@ -173,6 +173,27 @@ def _network_preflight_with_retry(
                 "[查活] 网络预检失败（%s/%s），保留当前 session/deviceId/CF Cookie 重试：%s",
                 attempt, max_attempts, str(exc)[:200],
             )
+            status = _exception_status_code(exc)
+            if status in (403, 429):
+                logger.warning('[网路] 触发 403/429，拉起 Cloakbrowser 降级绕过 (Attempt %s)...', attempt)
+                driver = None
+                try:
+                    from core.cloakbrowser_driver import build_cloak_driver
+                    from core.cloudflare_turnstile import solve_or_wait_cloudflare_turnstile
+                    driver, _ = build_cloak_driver(proxy=session.proxy, account_email=email, headless=False)
+                    driver.get('https://chatgpt.com/')
+                    solve_or_wait_cloudflare_turnstile(driver, timeout=25)
+                    cf_clearance = False
+                    for c in driver.context.cookies():
+                        session.session.cookies.set(c['name'], c['value'], domain=c.get('domain', 'chatgpt.com'))
+                        if c['name'] == 'cf_clearance': cf_clearance = True
+                    logger.info('[网路] Cloakbrowser 降级完成，获取到 cf_clearance: %s', cf_clearance)
+                except Exception as e:
+                    logger.warning('[网路] Cloakbrowser 降级执行异常: %s', e)
+                finally:
+                    if driver:
+                        try: driver.quit() 
+                        except: pass
             time.sleep(2)
     raise RuntimeError(f"网络预检多次失败：{last_exc}")
 
@@ -256,9 +277,7 @@ def _password_verify(session: BrowserSession, password: str) -> dict:
 
 
 def _mfa_issue_challenge(session: BrowserSession, factor_id: str) -> dict:
-    headers = session.get_auth_headers(referer="https://auth.openai.com/mfa-challenge")
-    headers.pop("openai-sentinel-token", None)
-    headers.pop("openai-sentinel-so-token", None)
+    headers = session.get_auth_headers(referer=f"https://auth.openai.com/mfa-challenge/{factor_id}")
     resp = session.post(
         "https://auth.openai.com/api/accounts/mfa/issue_challenge",
         headers=headers,
@@ -270,15 +289,34 @@ def _mfa_issue_challenge(session: BrowserSession, factor_id: str) -> dict:
 
 
 def _mfa_verify(session: BrowserSession, factor_id: str, code: str) -> dict:
-    headers = session.get_auth_headers(referer="https://auth.openai.com/mfa-challenge")
-    headers.pop("openai-sentinel-token", None)
-    headers.pop("openai-sentinel-so-token", None)
+    from core.openai_auth import build_sentinel_header, request_sentinel_token
+
+    headers = session.get_auth_headers(referer=f"https://auth.openai.com/mfa-challenge/{factor_id}")
+    try:
+        sentinel_resp = request_sentinel_token(session, "mfa_verify")
+        sentinel_header, so_header = build_sentinel_header(session, sentinel_resp, "mfa_verify")
+        headers["openai-sentinel-token"] = sentinel_header
+        if so_header:
+            headers["openai-sentinel-so-token"] = so_header
+    except Exception as exc:
+        logger.warning("[MFA] 获取 mfa_verify sentinel 失败，尝试 authorize_continue: %s", exc)
+        try:
+            sentinel_resp = request_sentinel_token(session, "authorize_continue")
+            sentinel_header, so_header = build_sentinel_header(session, sentinel_resp, "authorize_continue")
+            headers["openai-sentinel-token"] = sentinel_header
+            if so_header:
+                headers["openai-sentinel-so-token"] = so_header
+        except Exception as exc2:
+            logger.warning("[MFA] 获取 authorize_continue sentinel 也失败: %s", exc2)
+
     resp = session.post(
         "https://auth.openai.com/api/accounts/mfa/verify",
         headers=headers,
         data=json.dumps({"id": factor_id, "type": "totp", "code": code}),
         allow_redirects=False,
     )
+    if resp.status_code != 200:
+        logger.error("[MFA] verify 失败: status=%s, body=%s", resp.status_code, resp.text[:300])
     resp.raise_for_status()
     return resp.json()
 
@@ -452,6 +490,27 @@ def _login_via_email_otp(
         raise RuntimeError(f"OTP 登录成功但没有 OAuth continue_url: {validate_result}")
     if "about-you" in str(continue_url) or page_type in {"about_you", "about-you"}:
         raise RuntimeError(f"该邮箱登录后进入资料页，疑似不是完整已注册账号: page_type={page_type}, continue_url={continue_url}")
+    if "/mfa-challenge/" in continue_url or page_type == "mfa_challenge":
+        factor_id = _extract_factor_id(validate_result, continue_url)
+        secret = _account_totp_secret(email)
+        if not factor_id:
+            raise RuntimeError(f"OTP 登录后进入 MFA 但未拿到 factor_id: {validate_result}")
+        if not secret:
+            raise RuntimeError(f"OTP 登录后进入 MFA，但账号没有 totp_secret：{email}")
+        logger.info("[查活] 邮箱 OTP 验证后进入 MFA challenge，开始提交 TOTP：%s factor_id=%s", email, factor_id)
+        _mfa_issue_challenge(session, factor_id)
+        code = _account_totp_code(email)
+        if not code:
+            raise RuntimeError(f"无法生成 TOTP 验证码：{email}")
+        mfa_result = _mfa_verify(session, factor_id, code)
+        mfa_continue_url = _extract_continue_url(mfa_result) or continue_url
+        if not mfa_continue_url:
+            raise RuntimeError(f"MFA 验证成功但没有 continue_url: {mfa_result}")
+        return _follow_continue_and_fetch(
+            session,
+            mfa_continue_url,
+            referer=f"https://auth.openai.com/mfa-challenge/{factor_id}",
+        )
     logger.info("[查活] 邮箱 OTP 验证完成，开始跟随 OAuth callback")
     return _follow_continue_and_fetch(session, continue_url, referer="https://auth.openai.com/email-verification")
 
@@ -461,8 +520,18 @@ def _login_via_password_or_otp(
     email: str,
     otp_after_ts: float,
     email_source: str | None = None,
+    final_url: str = "",
 ) -> dict:
-    """优先密码登录；如进入 MFA challenge 则自动用 TOTP 完成。"""
+    """优先密码登录（或根据落点页面直接走邮箱 OTP）；如进入 MFA challenge 则自动用 TOTP 完成。"""
+    if "email-verification" in str(final_url or ""):
+        logger.info("[查活] 授权落点为邮箱验证页，直接走邮箱 OTP：%s", email)
+        return _login_via_email_otp(
+            session,
+            email,
+            otp_after_ts,
+            email_source=email_source,
+        )
+
     password = _account_registration_password(email)
     if not password:
         logger.info("[查活] 未找到注册密码，继续使用邮箱 OTP：%s", email)
@@ -667,6 +736,7 @@ def check_account_liveness(
                 email,
                 otp_after_ts,
                 email_source=email_source,
+                final_url=final_url,
             )
         access_token = str(session_info.get("accessToken") or "")
         if not access_token:

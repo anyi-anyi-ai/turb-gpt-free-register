@@ -100,6 +100,16 @@ def _run_live_check(*, account_id: int, email: str, proxy: str | None, trigger: 
         db.update_account_liveness(account_id, result)
         if result.get("ok"):
             _append_log(email, "[查活] 完成：账号正常，已刷新最新 AT/accessToken")
+            try:
+                from core.gptgrok2api_sync import _extract_account_info, push_accounts_to_gptgrok2api
+                updated_acc = db.get_account(account_id)
+                if updated_acc:
+                    info = _extract_account_info(updated_acc)
+                    if info.get("access_token"):
+                        push_accounts_to_gptgrok2api([info])
+                        _append_log(email, "[查活] 已自动将最新 AT 同步写入 gptGrok2api")
+            except Exception as sync_exc:
+                logger.warning("[查活] 自动同步至 gptGrok2api 失败: %s: %s", type(sync_exc).__name__, sync_exc)
         elif result.get("status") == "deactivated":
             _append_log(email, f"[查活] 完成：账号已废 {result.get('error') or ''}")
         else:
@@ -125,7 +135,10 @@ def _run_live_check(*, account_id: int, email: str, proxy: str | None, trigger: 
     finally:
         with _LOCK:
             _RUNNING.discard(int(account_id))
-        _QUEUE_SLOTS.release()
+        try:
+            _QUEUE_SLOTS.release()
+        except ValueError:
+            pass
 
 
 def enqueue_account_live_check(*, account_id: int, email: str, trigger: str = "manual", proxy: str | None = None) -> dict:

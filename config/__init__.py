@@ -241,6 +241,51 @@ def _refresh_top_level_constants() -> None:
         for k in dir(src):
             if k.isupper() or k in ("pick_proxy", "pick_browser_profile", "build_browser_environment", "validate_browser_profile"):
                 setattr(_self, k, getattr(src, k))
+    try:
+        from config import factory_config
+        for k in dir(factory_config):
+            if k.isupper() and not hasattr(_self, k):
+                setattr(_self, k, getattr(factory_config, k))
+    except Exception:
+        pass
+
+
+def __getattr__(name: str):
+    """动态兜底从环境变量、factory_config 或预设默认值读取，支持扩展模块对配置的自由消费。"""
+    import os
+    val = os.environ.get(name)
+    if val is not None:
+        return val
+    try:
+        from config import factory_config
+        if hasattr(factory_config, name):
+            return getattr(factory_config, name)
+    except Exception:
+        pass
+    defaults = {
+        "BITBROWSER_API": "http://127.0.0.1:54345",
+        "ADSPOWER_API": "http://127.0.0.1:50325",
+        "FINGERPRINT_BROWSER": "bitbrowser",
+        "CLASH_PROXY": "http://127.0.0.1:7897",
+        "CLASH_API": "http://127.0.0.1:9097",
+        "CLASH_SECRET": "",
+        "CLASH_GROUP": "GLOBAL",
+        "COOKIE_OUTPUT_DIR": "cookies",
+        "TOKEN_OUTPUT_DIR": "tokens",
+        "TEMP_EMAIL_PROVIDER": "yyds",
+        "CLAUDE_PROTOCOL_VERSION": "1.0.0",
+        "CLAUDE_USE_TEMP_EMAIL": True,
+        "EZCAPTCHA_API_KEY": "",
+        "EZCAPTCHA_API_BASE": "https://api.ez-captcha.com",
+        "VISION_API_BASE": "",
+        "VISION_API_KEY": "",
+        "VISION_MODEL": "gpt-5.5",
+    }
+    if name in defaults:
+        return defaults[name]
+    if name.isupper():
+        return ""
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 __all__ = [

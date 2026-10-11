@@ -1,46 +1,715 @@
 {
+  "persona_weights": {
+    "workplace_efficiency": 25,
+    "student_lifelong_learning": 25,
+    "daily_lifestyle": 20,
+    "programmer_geek": 15,
+    "travel_and_culture": 15
+  },
+  "languages": {
+    "en": {
+      "workplace_efficiency": [
+        {
+          "prompt": "Could you help polish this project update email to our VP to sound more concise and confident?",
+          "followups": [
+            "Can you turn the key deliverables and deadlines into a clean bulleted table?",
+            "Could you elaborate on the second point regarding mitigation for the delay?"
+          ],
+          "closings": [
+            "Looks great, thank you so much!",
+            "Got it, that's super helpful. Thanks!",
+            "Perfect, that makes it much clearer."
+          ]
+        },
+        {
+          "prompt": "How can I structure a 5-minute executive pitch deck for a new product initiative?",
+          "followups": [
+            "What should the problem-solution slide focus on specifically?",
+            "Can you format this into a 5-slide outline with speaking notes?"
+          ],
+          "closings": [
+            "Awesome outline, appreciate the quick help!",
+            "Thanks, I will use this structure for my deck."
+          ]
+        },
+        {
+          "prompt": "In Excel, what is the cleanest formula to look up values across multiple sheets without nested XLOOKUPs?",
+          "followups": [
+            "Could you show a concrete example using LET to make it more readable?",
+            "How does this approach handle missing or blank matches?"
+          ],
+          "closings": [
+            "Works like a charm, thanks a lot!",
+            "Understood, that saves me a ton of time."
+          ]
+        },
+        {
+          "prompt": "What is a good template for turning messy meeting notes into structured action items with owners?",
+          "followups": [
+            "Can you convert these sample notes into that table format?",
+            "How do you recommend tracking open risks versus settled decisions?"
+          ],
+          "closings": [
+            "Very tidy layout, thank you!",
+            "Great tips, sharing this with the team."
+          ]
+        }
+      ],
+      "student_lifelong_learning": [
+        {
+          "prompt": "Can you explain the Sunk Cost Fallacy using an intuitive everyday life example?",
+          "followups": [
+            "Could you elaborate on how this bias shows up in career decisions?",
+            "Can you summarize this into 3 practical self-check questions?"
+          ],
+          "closings": [
+            "Really clear explanation, thank you!",
+            "That makes complete sense, thanks!"
+          ]
+        },
+        {
+          "prompt": "What is the subtle difference between 'affect' and 'effect' with 3 practical memory tricks?",
+          "followups": [
+            "Can you provide 2 tricky sentences where people usually get confused?",
+            "Are there any rare cases where 'affect' is used as a noun?"
+          ],
+          "closings": [
+            "Finally got it clear, thanks so much!",
+            "Super handy memory tip, thank you."
+          ]
+        },
+        {
+          "prompt": "Could you recommend 3 foundational philosophy books that are engaging for an absolute beginner?",
+          "followups": [
+            "Between Meditations and Sophie's World, which would you start with first?",
+            "What core mindset should I keep in mind before reading Marcus Aurelius?"
+          ],
+          "closings": [
+            "Added to my reading list, thank you!",
+            "Wonderful recommendations, appreciate it."
+          ]
+        }
+      ],
+      "daily_lifestyle": [
+        {
+          "prompt": "What are 3 quick and healthy dinner ideas that can be prepared in under 25 minutes?",
+          "followups": [
+            "Could you give me the step-by-step cooking steps for the first one?",
+            "Can any of these be prepped the night before for quick assembly?"
+          ],
+          "closings": [
+            "Thanks, making this tonight!",
+            "Sounds delicious and easy, thanks!"
+          ]
+        },
+        {
+          "prompt": "What are some science-backed tips to improve deep sleep without taking supplements?",
+          "followups": [
+            "How does room temperature specifically affect REM and slow-wave sleep?",
+            "Can you turn this into a realistic 30-minute bedtime routine?"
+          ],
+          "closings": [
+            "Very insightful, going to test this tonight.",
+            "Thanks for the helpful advice!"
+          ]
+        },
+        {
+          "prompt": "Which indoor house plants thrive in low-light apartments and are non-toxic to cats?",
+          "followups": [
+            "How often should I water a Calathea or Spider Plant during winter?",
+            "What is a simple way to test soil moisture without special tools?"
+          ],
+          "closings": [
+            "Great to know, my cat thanks you!",
+            "Thanks, ordering one for my apartment."
+          ]
+        }
+      ],
+      "programmer_geek": [
+        {
+          "prompt": "What is the cleanest regex to match valid semver strings with optional pre-release tags?",
+          "followups": [
+            "Can you explain what each capture group does in that pattern?",
+            "Could you show how to extract the major, minor, and patch in Python?"
+          ],
+          "closings": [
+            "Regex tested and works, thanks!",
+            "Clear breakdown, appreciate the regex explanation."
+          ]
+        },
+        {
+          "prompt": "Could you compare the primary differences between Docker exec and Docker run in daily workflows?",
+          "followups": [
+            "How do environment variables and volume mounts behave differently between them?",
+            "Can you summarize this into a quick comparison table?"
+          ],
+          "closings": [
+            "Short and concise, exactly what I needed.",
+            "Thanks, that clears up my confusion."
+          ]
+        },
+        {
+          "prompt": "How can I refactor a 200-line Python function with nested if-else blocks into clean early returns?",
+          "followups": [
+            "Can you show a before-and-after snippet for guard clauses?",
+            "How would you handle logging without cluttering the return branches?"
+          ],
+          "closings": [
+            "Refactored code looks way cleaner, thanks!",
+            "Appreciate the practical refactoring tips."
+          ]
+        }
+      ],
+      "travel_and_culture": [
+        {
+          "prompt": "What are the essential packing and route planning tips for a 2-day weekend mountain hike?",
+          "followups": [
+            "What kind of emergency and blister-care items should never be skipped?",
+            "Could you turn the gear list into a checklist grouped by category?"
+          ],
+          "closings": [
+            "Packing right now, thanks for the guide!",
+            "Very thorough advice, thank you!"
+          ]
+        },
+        {
+          "prompt": "What are the flavor profile differences between Ethiopian natural process and washed Kenyan coffees?",
+          "followups": [
+            "What water temperature and grind size do you recommend for V60 pour-over?",
+            "Which one tends to have a brighter floral aroma?"
+          ],
+          "closings": [
+            "Fascinating coffee knowledge, cheers!",
+            "Brewing a cup right now, thanks!"
+          ]
+        },
+        {
+          "prompt": "Could you recommend 3 visually stunning nature documentary series with great narration?",
+          "followups": [
+            "Between Planet Earth II and Our Planet, which has the best underwater sequences?",
+            "Where can I stream them in 4K HDR?"
+          ],
+          "closings": [
+            "Weekend watchlist sorted, thank you!",
+            "Thanks for the top recommendations."
+          ]
+        }
+      ]
+    },
+    "ja": {
+      "workplace_efficiency": [
+        {
+          "prompt": "本日の打ち合わせの御礼と、来週火曜日までに進捗共有をお送りする丁寧なビジネスメールを作成してください。",
+          "followups": [
+            "主要な決定事項3点を簡潔な箇条書きフォーマットにまとめていただけますか？",
+            "もう少し柔らかく誠意が伝わるトーンに微調整してもらえますか？"
+          ],
+          "closings": [
+            "完璧です。迅速な作成をありがとうございました！",
+            "大変分かりやすく助かりました。ありがとうございます。"
+          ]
+        },
+        {
+          "prompt": "Excelで複数条件に一致するデータを抽出する際、XLOOKUPとFILTER関数の使い分けを教えてください。",
+          "followups": [
+            "FILTER関数を使った具体的な数式のサンプルを1つ提示していただけますか？",
+            "該当データが存在しない場合のエラー回避処理はどう書けば良いですか？"
+          ],
+          "closings": [
+            "数式が正常に動きました、ありがとうございます！",
+            "疑問がすっきり解消しました。"
+          ]
+        }
+      ],
+      "student_lifelong_learning": [
+        {
+          "prompt": "サンクコスト効果（コンコルド効果）の概念を、身近な日常の具体例を交えて分かりやすく解説してください。",
+          "followups": [
+            "この心理的バイアスに陥らないための3つのセルフチェック基準を教えてください。",
+            "日常生活の買い物やサブスク契約での具体例をもう1つ挙げられますか？"
+          ],
+          "closings": [
+            "とても分かりやすい解説でした、感謝します！",
+            "なるほど、納得がいきました。ありがとうございます。"
+          ]
+        },
+        {
+          "prompt": "哲学の入門書として、現代の初心者にも読みやすくおすすめの書籍を3冊紹介してください。",
+          "followups": [
+            "ストア派の『自省録』を読む前に知っておくべき前提知識はありますか？",
+            "まずはどの本から手に取るのが一番挫折しにくいでしょうか？"
+          ],
+          "closings": [
+            "読書リストに追加しました、ありがとうございます！",
+            "参考になるアドバイスをありがとうございました。"
+          ]
+        }
+      ],
+      "daily_lifestyle": [
+        {
+          "prompt": "平日の忙しい日の夜に30分以内で手軽に作れる、栄養バランスの良い夕食の献立を3つ教えてください。",
+          "followups": [
+            "1つ目の料理について、詳しい調味料の分量と調理手順を教えてもらえますか？",
+            "翌日のお弁当のおかずとしても傷みにくく活用できますか？"
+          ],
+          "closings": [
+            "今晩さっそく作ってみます、ありがとうございます！",
+            "手軽で美味しそうです。助かりました！"
+          ]
+        },
+        {
+          "prompt": "室内で育てやすく、日陰にも強くて猫にも安全な観葉植物をいくつか教えてください。",
+          "followups": [
+            "冬場の水やりの頻度と、土が乾いたかどうかの判断基準はどうすれば良いですか？",
+            "葉水はどのくらいの頻度で与えるのが適切ですか？"
+          ],
+          "closings": [
+            "猫がいるのでとても安心しました、ありがとうございます！",
+            "園芸店で探してみます。感謝します。"
+          ]
+        }
+      ],
+      "programmer_geek": [
+        {
+          "prompt": "Dockerのマルチステージビルドを活用してPythonイメージを軽量化する最小限のベストプラクティスを教えてください。",
+          "followups": [
+            "ビルドキャッシュを効率よく効かせるためのDockerfileの記述順序はどうなりますか？",
+            "簡単なBefore/AfterのDockerfile例を提示していただけますか？"
+          ],
+          "closings": [
+            "イメージサイズが半分以下になりました、感謝します！",
+            "非常に明快な説明でした、ありがとうございます。"
+          ]
+        },
+        {
+          "prompt": "Pythonでネストが深くなった複数のif-elif文をガード節を使って早期リターンに書き直すコツを教えてください。",
+          "followups": [
+            "例外処理と早期リターンを組み合わせる際の注意点はありますか？",
+            "短いコード例でリファクタリングの流れを示してもらえますか？"
+          ],
+          "closings": [
+            "コードの見通しが格段に良くなりました！",
+            "ありがとうございます、さっそくリファクタリングしてみます。"
+          ]
+        }
+      ],
+      "travel_and_culture": [
+        {
+          "prompt": "エチオピアのナチュラル精製とケニアのウォッシュド精製で、コーヒーの風味や酸味にどんな違いがありますか？",
+          "followups": [
+            "V60でエチオピアをハンドドリップする際、おすすめの湯温と抽出時間はどれくらいですか？",
+            "フルーティーな香りを一番引き出す挽き目（粒度）の目安は？"
+          ],
+          "closings": [
+            "奥深いコーヒーの世界が学べました、ありがとうございます！",
+            "明日の朝淹れてみるのが楽しみです。"
+          ]
+        }
+      ]
+    },
+    "zh_tw": {
+      "workplace_efficiency": [
+        {
+          "prompt": "請幫我潤色一封寄給副總的專案進度回報信件，希望語氣簡潔專業且展現掌控力。",
+          "followups": [
+            "能不能把核心里程碑與截止日期整理成一張簡短的核對清單？",
+            "第二點關於潛在風險因應的部分，能再精簡為兩句話嗎？"
+          ],
+          "closings": [
+            "修訂得非常得體，非常感謝！",
+            "好的，這樣回報清晰多了，謝謝你的幫忙！",
+            "很棒的修飾，感謝協助！"
+          ]
+        },
+        {
+          "prompt": "在 Excel 試算表中，若要跨多個工作表比對資料，除了巢狀 XLOOKUP 還有哪些推薦解法？",
+          "followups": [
+            "能否給一個搭配 LET 函數的簡潔公式範例？",
+            "如果遇到查無資料的情況，該如何優雅地回傳自訂提示？"
+          ],
+          "closings": [
+            "公式測試成功了，太感謝了！",
+            "解決了我卡關很久的問題，謝謝！"
+          ]
+        },
+        {
+          "prompt": "如何將雜亂的會議隨手筆記，快速整理成有負責人與追蹤期限的會議行動清單？",
+          "followups": [
+            "能提供一個通用的三欄式表格範本嗎？",
+            "對於跨部門待確認的事項，建議如何清楚標註？"
+          ],
+          "closings": [
+            "表格排版很清楚，這就拿來套用！",
+            "感謝提供這麼實用的會議整理模板。"
+          ]
+        }
+      ],
+      "student_lifelong_learning": [
+        {
+          "prompt": "請用通俗易懂的生活例子，向初學者解釋什麼是『沉沒成本謬誤』。",
+          "followups": [
+            "這個心理偏誤在日常職涯或感情選擇中常見的具體表現是什麼？",
+            "能不能歸納出 3 個幫助自己及時停損的自問清單？"
+          ],
+          "closings": [
+            "解釋得非常生動，完全懂了！",
+            "非常有啟發，感謝詳細的說明。"
+          ]
+        },
+        {
+          "prompt": "請推薦 3 本適合現代人入門的哲學或思維模式經典書籍，並簡述核心價值。",
+          "followups": [
+            "在《自省錄》與《蘇菲的世界》之間，你會建議先讀哪一本？",
+            "讀哲學書籍時，如何避免陷入過度抽象的文字迷宮？"
+          ],
+          "closings": [
+            "已經加入待讀書單，謝謝你的推薦！",
+            "很中肯的閱讀建議，非常感謝。"
+          ]
+        }
+      ],
+      "daily_lifestyle": [
+        {
+          "prompt": "請推薦 3 道 25 分鐘內能搞定的家常快手便當菜，營養均衡且耐加熱。",
+          "followups": [
+            "請詳細說明第一道菜的調味比例與烹調火候要點。",
+            "用微波爐二度加熱時，有哪些技巧可以維持蔬菜口感？"
+          ],
+          "closings": [
+            "看起來很下飯，今晚就試做看看！",
+            "很實用的食譜，感謝分享！"
+          ]
+        },
+        {
+          "prompt": "套房室內採光普通，想挑幾盆耐陰、不易爛根且對貓咪無毒的室內植物有哪些？",
+          "followups": [
+            "像波士頓腎蕨或吊蘭在秋冬季大約幾天澆一次水比較安全？",
+            "有沒有不靠濕度計就能判斷土壤乾燥程度的小撇步？"
+          ],
+          "closings": [
+            "家裡有貓真的很需要注意這個，太感謝了！",
+            "週末就去花市挑一盆，謝謝！"
+          ]
+        },
+        {
+          "prompt": "台灣秋冬季節室內反潮嚴重，除了開除濕機外還有哪些低成本防潮防霉技巧？",
+          "followups": [
+            "衣櫃和鞋櫃內部有哪些推薦的物理防潮小方法？",
+            "除濕機設定在多少濕度對人體和傢俱最合適？"
+          ],
+          "closings": [
+            "非常及時的生活小常識，感謝！",
+            "受教了，這就來整理衣櫃防潮。"
+          ]
+        }
+      ],
+      "programmer_geek": [
+        {
+          "prompt": "在寫正規表達式時，如何寫出簡潔且相容可選預發布標籤的 Semantic Versioning 規則？",
+          "followups": [
+            "能不能逐段拆解每個捕獲群組代表的含意？",
+            "在 Python 或 JavaScript 中如何提取 major、minor 與 patch 欄位？"
+          ],
+          "closings": [
+            "正則表達式跑通過了，感謝解答！",
+            "拆解得很詳細，學到了！"
+          ]
+        },
+        {
+          "prompt": "請比較 Docker run 與 Docker exec 在日常容器維護與除錯時的本質區別。",
+          "followups": [
+            "兩者在處理環境變數與容器退出碼上有何不同？",
+            "能整理成兩句話的日常指令口訣嗎？"
+          ],
+          "closings": [
+            "觀念完全釐清了，非常感謝！",
+            "清楚明瞭，正是我需要的。"
+          ]
+        },
+        {
+          "prompt": "如何將多層巢狀 if-else 邏輯優雅重構成 Guard Clauses（衛語句）早期返回？",
+          "followups": [
+            "能不能給一個簡單的 Before 與 After 程式碼範例？",
+            "在進行這類重構時，單元測試應該注意涵蓋哪些邊界情境？"
+          ],
+          "closings": [
+            "重構後的程式碼乾淨多了，謝謝！",
+            "很棒的重構思路，感謝指導。"
+          ]
+        }
+      ],
+      "travel_and_culture": [
+        {
+          "prompt": "如果想規劃兩天一夜的台灣山林步道輕旅行，行前打包與裝備有哪些不可忽視的細節？",
+          "followups": [
+            "山區防午後雷陣雨與防失溫裝備有哪些絕對不能省？",
+            "能不能幫我列成按『穿著、裝備、糧食、醫藥』分類的核对清單？"
+          ],
+          "closings": [
+            "清單很完整，整理背包心裡踏實多了！",
+            "感謝細心提醒，週末準備出發。"
+          ]
+        },
+        {
+          "prompt": "衣索比亞日曬與肯亞水洗咖啡豆，在果酸層次與香氣上有何主要差異？",
+          "followups": [
+            "手沖淺焙衣索比亞時，建議的水溫和粉水比大約多少最適當？",
+            "研磨刻度如果稍細會對風味層次產生什麼影響？"
+          ],
+          "closings": [
+            "很有深度的咖啡科普，明早沖一杯試試！",
+            "解說得很專業，謝謝你的分享！"
+          ]
+        }
+      ]
+    },
+    "zh": {
+      "workplace_efficiency": [
+        {
+          "prompt": "帮我润色一段给项目总监的周报更新邮件，希望语气精炼专业，突出关键进展与风险把控。",
+          "followups": [
+            "能否把核心成果与下周待办梳理成一张简洁的对照表格？",
+            "针对延期风险的应对措施，能再精简提炼成两句话吗？"
+          ],
+          "closings": [
+            "润色得很得体，多谢！",
+            "好的，非常清晰，谢谢！",
+            "排版很舒服，周报就按这个发了。"
+          ]
+        },
+        {
+          "prompt": "在 Excel 中跨多表匹配数据时，除了复杂的嵌套 XLOOKUP，还有哪些更优雅高效的写法？",
+          "followups": [
+            "能否结合 LET 函数给一个提高可读性的具体公式示例？",
+            "遇到匹配项为空或报错时，如何用 IFERROR 或默认值兜底？"
+          ],
+          "closings": [
+            "公式跑通了，解决大问题，多谢！",
+            "讲得非常透彻，受教了。"
+          ]
+        },
+        {
+          "prompt": "如何把一场碎片杂乱的会议讨论记录，快速整理为带负责人与截止时间的行动项清单？",
+          "followups": [
+            "能提供一个经典实用的三段式会议纪要排版模板吗？",
+            "跨部门争议未定事项，在纪要中怎么表述才既客观又不失敏锐？"
+          ],
+          "closings": [
+            "模板很实用，已经存入工作笔记了。",
+            "非常感谢，这套方法很规范。"
+          ]
+        }
+      ],
+      "student_lifelong_learning": [
+        {
+          "prompt": "请用通俗易懂的生活例子，向初学者解释一下什么是‘沉没成本谬误’。",
+          "followups": [
+            "能不能总结出 3 个在做日常决策时避免沉没成本陷阱的自查要点？",
+            "在学业或职业转型面临沉没成本时，如何理性建立止损思维？"
+          ],
+          "closings": [
+            "举例很形象，完全理解了！",
+            "非常有启发，感谢解答！"
+          ]
+        },
+        {
+          "prompt": "请推荐 3 本适合零基础读者入门的西方哲学或思维模式经典书籍，并附带简要理由。",
+          "followups": [
+            "在《沉思录》和《苏菲的世界》之间，你更建议初学者先精读哪一本？",
+            "读哲学原著时，如何避免陷入抽象概念的死胡同？"
+          ],
+          "closings": [
+            "书单已加入微信读书，谢谢推荐！",
+            "很真诚的书单，感谢分享。"
+          ]
+        },
+        {
+          "prompt": "英语中 affect 和 effect 最容易混淆的用法有哪些？请分享 3 个实用的记忆口诀。",
+          "followups": [
+            "能不能给出两道最容易出错的高频考题句子进行对比？",
+            "affect 作为名词和 effect 作为动词的罕见生僻场景是什么？"
+          ],
+          "closings": [
+            "口诀很顺口，这次彻底记住了！",
+            "解答得很细致，感谢！"
+          ]
+        }
+      ],
+      "daily_lifestyle": [
+        {
+          "prompt": "请推荐几道简单、营养又好做的家常快手菜，最好半小时内能搞定且适合带便当。",
+          "followups": [
+            "请详细说说第一道菜的具体调料配比和烹饪火候要点。",
+            "第二天下便当用微波炉加热时，怎样才能尽量保持口感不发软？"
+          ],
+          "closings": [
+            "今晚就照着食谱试做一下，谢谢！",
+            "好的，非常实用，感谢分享！"
+          ]
+        },
+        {
+          "prompt": "室内养什么绿植既耐阴又不容易烂根，还能兼顾对家里养猫宠物安全无毒？",
+          "followups": [
+            "像吊兰或波士顿肾蕨在秋冬季大概几天浇一次水合适？",
+            "有什么不依赖湿度计判断土壤干湿的简便经验？"
+          ],
+          "closings": [
+            "家里有猫正好需要这个，太感谢了！",
+            "周末就去花市买一盆，谢谢！"
+          ]
+        },
+        {
+          "prompt": "怎样才能科学改善深度睡眠质量？有什么不依赖药物且容易坚持的睡前好习惯？",
+          "followups": [
+            "睡前半小时手机蓝光具体是如何抑制褪黑素分泌的？有什么好的替代活动？",
+            "能不能帮我提炼成 3 条简单易行的睡前 30 分钟打卡清单？"
+          ],
+          "closings": [
+            "今晚调整一下作息试试，多谢建议！",
+            "讲得很科学，感谢整理。"
+          ]
+        }
+      ],
+      "programmer_geek": [
+        {
+          "prompt": "在编写正则表达式时，如何写出既严谨又易读的语义化版本号（SemVer）匹配规则？",
+          "followups": [
+            "能不能逐段拆解正则表达式中每个捕获分组的具体作用？",
+            "在 Python 中如何通过正则优雅提取 major、minor 和 patch 字段？"
+          ],
+          "closings": [
+            "正则测试通过了，感谢解答！",
+            "拆解得很清楚，学到了！"
+          ]
+        },
+        {
+          "prompt": "请用通俗的技术语言对比一下 Docker run 与 Docker exec 在日常容器运维中的本质区别。",
+          "followups": [
+            "两者在处理环境变量注入与进程 PID 1 隔离上有何底层不同？",
+            "能提炼成两句日常运维避免误用的口诀吗？"
+          ],
+          "closings": [
+            "概念彻底搞明白了，非常感谢！",
+            "解释得非常直观，点赞！"
+          ]
+        },
+        {
+          "prompt": "在 Python 中，如何把多层嵌套的复杂 if-else 逻辑重构成卫语句（Guard Clauses）提前返回？",
+          "followups": [
+            "能否给出一个清晰的重构前后代码对比示例？",
+            "在多分支场景下，卫语句与策略模式分别适用于哪种复杂度？"
+          ],
+          "closings": [
+            "重构后代码清爽多了，谢谢指导！",
+            "思路很清晰，这就去改代码。"
+          ]
+        }
+      ],
+      "travel_and_culture": [
+        {
+          "prompt": "如果计划一次两天一夜的山林徒步短途旅行，行前背包准备与物资清单有哪些核心要点？",
+          "followups": [
+            "户外防失温装备与紧急应急药品有哪些是绝对不能漏掉的？",
+            "能不能按‘衣着、装备、补给、应急’整理成带方框的清单？"
+          ],
+          "closings": [
+            "清单很详尽，收拾行李心里有数了！",
+            "非常实用的徒步指南，感谢！"
+          ]
+        },
+        {
+          "prompt": "埃塞俄比亚日晒与肯尼亚水洗咖啡豆，在果酸风味层次和香气表现上有何主要区别？",
+          "followups": [
+            "手冲浅烘埃塞俄比亚时，推荐的水温和粉水比是多少最容易激发花果香？",
+            "研磨刻度如果稍偏细，会对风味层次产生怎样的萃取影响？"
+          ],
+          "closings": [
+            "咖啡科普很地道，明早手冲一杯试试！",
+            "学到了，感谢专业解答！"
+          ]
+        },
+        {
+          "prompt": "请推荐 3 部画面极度震撼、解说沉浸高分的经典自然地理纪录片，并附简评。",
+          "followups": [
+            "在《地球脉动》和《蓝色星球》中，哪一部对海洋深处的刻画更令人难忘？",
+            "周末适合全家一起观看的是哪一部？"
+          ],
+          "closings": [
+            "周末观影片单有了，非常感谢！",
+            "部部经典，收藏了！"
+          ]
+        }
+      ]
+    }
+  },
+  "generic_followups": {
+    "en": [
+      "Could you elaborate on the second point with a quick practical tip?",
+      "Can you turn the key points into a short bulleted table format?",
+      "What is the most common pitfall people run into when trying this?",
+      "Could you give a concrete real-world example to illustrate this further?"
+    ],
+    "ja": [
+      "2番目のポイントについて、実践的なアドバイスをもう少し詳しく教えていただけますか？",
+      "要点をシンプルな表形式にまとめていただくことは可能ですか？",
+      "これを実践する際、初心者が最も陥りやすい注意点は何でしょうか？",
+      "具体的な実例を1つ挙げて説明していただけますか？"
+    ],
+    "zh_tw": [
+      "針對第二點提到的內容，能不能再深入補充一個實務小技巧？",
+      "能不能幫我把核心重點轉換成簡短的條列式表格？",
+      "在實際執行這個方法時，最容易踩到的盲點是什麼？",
+      "能否舉一個更貼近生活的實際案例說明？"
+    ],
+    "zh": [
+      "第二点能展开讲讲吗？有没有实际操作中的避坑建议？",
+      "能不能帮我把核心要点转成一个简短的表格格式？",
+      "在实际落地这个方案时，新手最容易踩的误区是什么？",
+      "针对你提到的关键点，能不能举一个更具体的实际例子说明？"
+    ]
+  },
+  "generic_closings": {
+    "en": [
+      "Got it, that's very clear. Thank you!",
+      "Perfect, thanks a lot for the quick breakdown!",
+      "Awesome, that solves my question completely. Cheers!"
+    ],
+    "ja": [
+      "分かりました、非常に丁寧で明快なご説明をありがとうございました！",
+      "完璧です。迅速なご回答をいただき感謝いたします！",
+      "疑問がすっきり解消しました。ありがとうございます！"
+    ],
+    "zh_tw": [
+      "好的，非常清楚明瞭，謝謝你！",
+      "太棒了，完全解答了我的疑惑，非常感謝！",
+      "收到，實務上很有幫助，謝謝！"
+    ],
+    "zh": [
+      "好的，非常清晰，谢谢！",
+      "解答得太透彻了，非常感谢！",
+      "明白了，这就去实际尝试一下，多谢！"
+    ]
+  },
   "categories": {
+    "workplace_efficiency": [
+      "帮我润色一段给项目总监的周报更新邮件，希望语气精炼专业，突出关键进展与风险把控。",
+      "在 Excel 中跨多表匹配数据时，除了复杂的嵌套 XLOOKUP，还有哪些更优雅高效的写法？"
+    ],
+    "student_lifelong_learning": [
+      "请用通俗易懂的生活例子，向初学者解释一下什么是‘沉没成本谬误’。",
+      "请推荐 3 本适合零基础读者入门的西方哲学或思维模式经典书籍，并附带简要理由。"
+    ],
     "daily_lifestyle": [
-      "请推荐几道简单、营养又好做的家常快手菜，最好半小时内能搞定。",
-      "每天喝多少水最健康？不同体重的人有推荐饮水量吗？",
-      "怎样才能改善睡眠质量？有什么不依赖药物的助眠小技巧吗？",
-      "如何合理安排周末时间，既能充分休息又能保持充实？",
-      "室内养什么植物既耐阴又容易存活，还能净化空气？",
-      "推荐几首适合在工作或学习时听的轻音乐或Lo-Fi歌单风格。"
+      "请推荐几道简单、营养又好做的家常快手菜，最好半小时内能搞定且适合带便当。",
+      "室内养什么绿植既耐阴又不容易烂根，还能兼顾对家里养猫宠物安全无毒？"
     ],
-    "study_and_reading": [
-      "请推荐 3 本适合初学者入门的时间管理或个人成长书籍，并附带简要理由。",
-      "番茄工作法在实际执行时有哪些容易踩的坑？怎么调整最合适？",
-      "费曼学习法的核心步骤是什么？能不能举一个通俗易懂的例子说明？",
-      "怎样提高自己的深度阅读理解能力和做读书笔记的效率？",
-      "在信息碎片化时代，如何建立属于自己的个人知识库体系？"
-    ],
-    "tech_and_coding": [
-      "在 Python 中，列表推导式与 map/filter 相比有哪些优缺点？",
-      "请用简单的例子解释一下什么是 Docker 容器与虚拟机的本质区别。",
-      "Git 中 rebase 和 merge 在日常团队协作分支合并时该如何选择？",
-      "解释一下 RESTful API 的核心设计规范，有哪些常见的命名误区？",
-      "如何写出结构清晰、可维护性高的前端组件代码？"
+    "programmer_geek": [
+      "在编写正则表达式时，如何写出既严谨又易读的语义化版本号（SemVer）匹配规则？",
+      "请用通俗的技术语言对比一下 Docker run 与 Docker exec 在日常容器运维中的本质区别。"
     ],
     "travel_and_culture": [
-      "如果计划一次 3 天 2 晚的短途自然风光旅行，行前准备清单有哪些要点？",
-      "世界上有哪些有趣的咖啡文化？比如意大利浓缩咖啡和北欧滴滤咖啡有何不同？",
-      "去高原地区旅游前需要做哪些身体适应准备和装备防范？",
-      "推荐几部豆瓣或IMDb高分的自然纪录片，适合周末观看。"
-    ],
-    "work_and_writing": [
-      "帮我润色一段邮件：感谢对方今天的会议，并约定下周二前同步项目进度报告。",
-      "撰写周报时，如何把日常繁琐的工作提炼出更有价值的业务成果？",
-      "如何高效主持一次 30 分钟内的跨部门敏捷对齐会议？",
-      "请列举 5 个能显著提升办公效率的 Markdown 语法小技巧。"
-    ],
-    "english_prompts": [
-      "Can you suggest 3 quick and healthy breakfast ideas for busy weekdays?",
-      "What are the key differences between synchronous and asynchronous programming?",
-      "Could you recommend a few classic sci-fi novels suitable for casual reading?",
-      "How can I improve my daily vocabulary retention when learning a new language?",
-      "What is the simplest way to explain microservices architecture to a beginner?",
-      "Please give me some practical tips for reducing eye strain when working long hours at a desk."
+      "如果计划一次两天一夜的山林徒步短途旅行，行前背包准备与物资清单有哪些核心要点？",
+      "埃塞俄比亚日晒与肯尼亚水洗咖啡豆，在果酸风味层次和香气表现上有何主要区别？"
     ]
   }
 }

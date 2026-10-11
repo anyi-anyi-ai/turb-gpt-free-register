@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "engine": "onnxruntime",
+  "models": [
+    {
+      "id": "arkose_roll_animal",
+      "name": "Arkose 动物方向旋转角度判别模型",
+      "filename": "arkose_roll_animal.onnx",
+      "format": "ONNX",
+      "size_mb": 11.4,
+      "input_shape": [1, 3, 224, 224],
+      "latency_cpu_ms": 16.5,
+      "specialization": "专精旋转几何题：判断动物面对的角度，与左侧提示的手指/箭头朝向精确匹配 (0°~360°)",
+      "trigger_keywords": [
+        "roll",
+        "direction",
+        "face",
+        "hand",
+        "points",
+        "arrow",
+        "angle",
+        "match the direction"
+      ],
+      "supported_platforms": ["GitHub", "ChatGPT", "Microsoft", "Twitter"]
+    },
+    {
+      "id": "arkose_shadow_match",
+      "name": "Arkose 阴影与相同图形匹配模型",
+      "filename": "arkose_shadow_match.onnx",
+      "format": "ONNX",
+      "size_mb": 14.2,
+      "input_shape": [1, 3, 256, 256],
+      "latency_cpu_ms": 22.0,
+      "specialization": "专精图形匹配题：提取主体特征向量与右侧 6 张候选阴影或等价物做余弦相似度匹配，输出最吻合的选项索引 (0~5)",
+      "trigger_keywords": [
+        "shadow",
+        "silhouette",
+        "identical",
+        "match the object",
+        "same shape",
+        "matching pair"
+      ],
+      "supported_platforms": ["GitHub", "ChatGPT", "EA", "Roblox"]
+    },
+    {
+      "id": "recaptcha_object_detect",
+      "name": "reCAPTCHA / hCaptcha 目标检测小模型",
+      "filename": "recaptcha_yolo_tiles.onnx",
+      "format": "ONNX (YOLOv8 Nano)",
+      "size_mb": 8.7,
+      "input_shape": [1, 3, 640, 640],
+      "latency_cpu_ms": 28.0,
+      "specialization": "专精网格点选题：检测九宫格或 16 宫格图像中是否存在红绿灯、公交车、自行车、消火栓、人行横道等目标物体，输出需点击的网格编号列表",
+      "trigger_keywords": [
+        "select all",
+        "traffic lights",
+        "bicycles",
+        "bus",
+        "fire hydrant",
+        "crosswalk",
+        "motorcycles",
+        "cars"
+      ],
+      "supported_platforms": ["Google", "Discord", "EpicGames", "Steam"]
+    },
+    {
+      "id": "slider_gap_match",
+      "name": "通用滑块缺口定位与边缘匹配模型",
+      "filename": "slider_gap_match.onnx",
+      "format": "ONNX",
+      "size_mb": 6.8,
+      "input_shape": [1, 1, 280, 160],
+      "latency_cpu_ms": 12.0,
+      "specialization": "专精拖拽拼图题：计算背景图阴影缺口的横坐标偏移量 (Offset X)，配合拟人鼠标轨迹直接完成拖拽对齐",
+      "trigger_keywords": [
+        "slide",
+        "slider",
+        "drag the puzzle",
+        "complete the puzzle",
+        "fit the piece"
+      ],
+      "supported_platforms": ["极验 (Geetest)", "阿里云盾", "TikTok", "Cloudflare"]
+    },
+    {
+      "id": "ddddocr_target_det",
+      "name": "通用目标与图标检测小模型",
+      "filename": "ddddocr_target_det.onnx",
+      "format": "ONNX (YOLO/SSD)",
+      "size_mb": 20.1,
+      "input_shape": [1, 3, 416, 416],
+      "latency_cpu_ms": 15.0,
+      "specialization": "专精点选目标定位：识别点选验证码中所有文字与图标的包围盒 (Bounding Box) 坐标",
+      "trigger_keywords": [
+        "click",
+        "order",
+        "sequence",
+        "icon",
+        "character"
+      ],
+      "supported_platforms": ["Bilibili", "极验", "网易易盾"]
+    },
+    {
+      "id": "ddddocr_ocr",
+      "name": "通用字母数字与文字 OCR 识别模型",
+      "filename": "ddddocr_ocr.onnx",
+      "format": "ONNX (CNN+CTC)",
+      "size_mb": 54.0,
+      "input_shape": [1, 1, 64, "width"],
+      "latency_cpu_ms": 10.0,
+      "specialization": "专精字母数字识别：快速提取各类变形、干扰线字母数字验证码，直接输出纯文本字符串",
+      "trigger_keywords": [
+        "captcha text",
+        "enter characters",
+        "alphanumeric",
+        "code in image"
+      ],
+      "supported_platforms": ["通用 Web 站点"]
+    }
+  ]
+}

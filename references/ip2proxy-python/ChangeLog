@@ -1,0 +1,59 @@
+3.6.1	2026-04-20
+	* Added support for AIC proxy type for is_proxy field.
+	
+3.6.0	2025-10-31
+	* Added checking logic for zip file.
+	
+3.5.2	2025-10-17
+	* Fixed the database checking logic. (#9).
+
+3.5.1	2025-02-21
+	* Tested with Python 3.13.
+
+3.5.0	2025-02-18
+	* Added new field "fraud_score" to support PX12 database.
+
+3.4.2	2024-10-04
+	* Tested with CPython and PyPy.
+
+3.4.1	2024-09-27
+	* Tested with Python 3.12.
+
+3.4.0	2022-06-23
+	* Reduced file I/O.
+
+3.3.0	2021-08-18
+	* Support IP2Proxy Web Service.
+
+3.2.1	2021-07-19
+	* Removed unused code.
+
+3.2.0	2021-06-25
+	* Added provider field and exception handling for incorrect BIN database.
+
+3.1.2	2019-08-13
+	* Updated version number to latest.
+
+3.1.1	2019-08-11
+	* Removed unwanted file.
+
+3.1.0	2020-08-11
+	* Fixed bug.
+
+3.0.0	2020-07-24
+	* Added support for 6to4 and Teredo.
+
+2.2.0	2019-12-04
+	* Reduce File I/O.
+
+2.1.0	2019-07-03
+	* Added support for 6to4 and Teredo.
+
+2.0.0	2019-05-16
+	* Added supports for PX5-PX8 database.
+
+1.0.1	2016-12-16
+	* Changed variable to match standard. 
+
+1.0.0	2016-12-15
+	* Initial release     

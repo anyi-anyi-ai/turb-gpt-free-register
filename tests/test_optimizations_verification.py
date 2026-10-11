@@ -54,12 +54,18 @@ class TestRegistrationOptimizations(unittest.TestCase):
         """测试 build_cloak_driver 在浏览器启动失败时自动释放 IP 配额。"""
         from core import cloakbrowser_driver
 
+        from unittest.mock import MagicMock
+        mock_cloak = MagicMock()
+        mock_cloak.launch.side_effect = RuntimeError("Browser launch failed")
+        mock_cloak.launch_persistent_context.side_effect = RuntimeError("Browser launch failed")
+
         with patch("config.proxy.pick_proxy", return_value="http://JP.sess_99:pwd@127.0.0.1:2260"):
-            with patch("core.ip_quota_manager.ip_quota_manager.release_in_flight") as mock_release:
-                with patch("cloakbrowser.launch", side_effect=RuntimeError("Browser launch failed")):
-                    with self.assertRaises(RuntimeError):
-                        cloakbrowser_driver.build_cloak_driver(proxy=None, country="JP")
-                    mock_release.assert_called_once_with("http://JP.sess_99:pwd@127.0.0.1:2260")
+            with patch("core.continent_proxy_router.check_proxy_tunnel_alive", return_value=True):
+                with patch("core.ip_quota_manager.ip_quota_manager.release_in_flight") as mock_release:
+                    with patch.dict("sys.modules", {"cloakbrowser": mock_cloak}):
+                        with self.assertRaises(RuntimeError):
+                            cloakbrowser_driver.build_cloak_driver(proxy=None, country="JP")
+                        mock_release.assert_called_once_with("http://JP.sess_99:pwd@127.0.0.1:2260")
 
 
 if __name__ == "__main__":

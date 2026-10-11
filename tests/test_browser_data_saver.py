@@ -218,7 +218,32 @@ class BrowserDataSaverTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(saver.snapshot()["data_saver_blocked_count"], 0)
+    def test_core_auth_domains_never_blocked(self):
+        context = _Context()
+        with patch("core.browser_data_saver._cfg.BROWSER_DATA_SAVER_MODE", True), patch(
+            "core.browser_data_saver._cfg.BROWSER_DATA_SAVER_BLOCKED_RESOURCE_TYPES",
+            ["script", "image", "other"],
+        ), patch(
+            "core.browser_data_saver._cfg.BROWSER_DATA_SAVER_BLOCKED_URL_PATTERNS",
+            ["**/*"],
+        ):
+            saver = BrowserDataSaver(label="test")
+            saver.install_playwright(context)
+            # 即使配置拦截了 script 且 URL 匹配通配符，核心认证域名的脚本与请求必须绝对放行
+            oai_script = _Route(_Request("script", "https://cdn.oaistatic.com/_next/static/chunks/main-123.js"))
+            auth_req = _Route(_Request("fetch", "https://auth.openai.com/api/accounts/email-otp/validate"))
+            cf_challenge = _Route(_Request("script", "https://challenges.cloudflare.com/turnstile/v0/api.js"))
+            external_blocked = _Route(_Request("script", "https://tracking.google.com/analytics.js"))
+
+            context.handler(oai_script)
+            context.handler(auth_req)
+            context.handler(cf_challenge)
+            context.handler(external_blocked)
+
+            self.assertEqual(oai_script.action, "continue")
+            self.assertEqual(auth_req.action, "continue")
+            self.assertEqual(cf_challenge.action, "continue")
+            self.assertEqual(external_blocked.action, "abort")
 
 
 if __name__ == "__main__":

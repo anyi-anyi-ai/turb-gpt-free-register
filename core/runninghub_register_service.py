@@ -110,9 +110,9 @@ class RunningHubRegistrar:
                             token, kind = _ms_access_token(ctx, http=http_c)
                             msgs = _fetch_graph_messages(http_c, token) if kind == "graph" else _fetch_outlook_rest_messages(http_c, token)
                             for m in msgs:
-                                body = m.get("body", "") or m.get("snippet", "") or m.get("subject", "")
-                                if "runninghub" in body.lower() or "verification" in body.lower() or "código" in body.lower() or "code" in body.lower():
-                                    otp = extract_otp(body)
+                                body_all = f"{m.get('subject', '')} {m.get('body', '')} {m.get('bodyPreview', '')}".lower()
+                                if any(k in body_all for k in ("runninghub", "running hub", "verification", "código", "code")):
+                                    otp = extract_otp(m) or extract_otp(m.get("body", "") or m.get("content", ""))
                                     if otp:
                                         logger.info(f"[{email}] 成功从 Outlook/Graph 提取到验证码: {otp}")
                                         return otp
@@ -126,9 +126,9 @@ class RunningHubRegistrar:
                     if imap_ctx:
                         msgs = _fetch_inbox_messages(imap_ctx, limit=5)
                         for m in msgs:
-                            body = m.get("body", "") or m.get("subject", "")
-                            if "runninghub" in body.lower() or "code" in body.lower():
-                                otp = extract_otp(body)
+                            body_all = f"{m.get('subject', '')} {m.get('body', '')}".lower()
+                            if any(k in body_all for k in ("runninghub", "code", "verification")):
+                                otp = extract_otp(m) or extract_otp(m.get("body", ""))
                                 if otp:
                                     logger.info(f"[{email}] 成功从 IMAP 提取到验证码: {otp}")
                                     return otp
@@ -173,6 +173,12 @@ class RunningHubRegistrar:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
             )
             page = await context.new_page()
+            try:
+                from core.live_browser_hub import LiveBrowserHub
+                LiveBrowserHub.get_hub().attach_page(page)
+            except Exception as e_live:
+                logger.debug(f"LiveBrowser attach: {e_live}")
+
             try:
                 from playwright_stealth import Stealth
                 await Stealth().apply_stealth_async(page)
@@ -232,21 +238,32 @@ class RunningHubRegistrar:
                 logger.info(f"[{email}] 点击 Next Step...")
                 await page.wait_for_timeout(2500)
 
-                # 3. 检查天爱旋转验证码 (Tianai Captcha)
-                tianai_captcha = await page.query_selector(".tianai-captcha-slider, .captcha-box, .captcha-layer")
-                if tianai_captcha:
-                    logger.info(f"[{email}] 检测到天爱旋转验证码，等待滑块旋转验证通过...")
-                    for _ in range(60):
-                        if not await page.query_selector(".tianai-captcha-slider, .captcha-box, .captcha-layer"):
-                            logger.info(f"[{email}] ✅ 天爱验证码已通过！")
-                            break
-                        await page.wait_for_timeout(1000)
+                # 3. 检查旋转验证码并等待进入 Step 2
+                try:
+                    from core.live_browser_hub import LiveBrowserHub
+                    LiveBrowserHub.ensure_server(8799)
+                    LiveBrowserHub.open_browser(8799)
+                except Exception as _ex:
+                    logger.debug(f"LiveBrowser auto open: {_ex}")
+
+                logger.info(f"[{email}] 正在等待滑块/旋转拼图验证通过 (已在浏览器打开 http://127.0.0.1:8799/live，请直接在网页中拖动滑块通过验证)...")
+                step2_ready = False
+                for wait_i in range(1, 301):
+                    # 如果找到了验证码输入框，说明滑块已通过并进入了 Step 2
+                    code_el = await page.query_selector("input[placeholder*='code' i], input[placeholder*='verification' i], input[placeholder*='验证码' i], .verification-code-input")
+                    if code_el and await code_el.is_visible():
+                        step2_ready = True
+                        logger.info(f"[{email}] [SUCCESS] 滑块拼图已通过，成功进入 Step 2 (邮箱验证码输入界面)！")
+                        break
+                    if wait_i % 10 == 0:
+                        logger.info(f"[{email}] 正在等待滑块验证通过... (已等待 {wait_i}s / 300s，可在 http://127.0.0.1:8799/live 中拖动)")
+                    await page.wait_for_timeout(1000)
+
+                if not step2_ready:
+                    logger.warning(f"[{email}] 尚未检测到 Step 2 输入框，尝试继续向下执行...")
 
                 # 4. 获取邮箱验证码并填写 Step 2
                 otp = self.fetch_email_otp(email, wait_timeout=120)
-                if not otp and not headless:
-                    print(f"\n[提示] 自动读信未获取到验证码，若你在邮箱中收到了，请在此输入（留空跳过）:")
-                    otp = input("验证码: ").strip()
 
                 if not otp:
                     raise RuntimeError("未能在有效时间内获取到邮箱验证码")
@@ -314,7 +331,7 @@ class RunningHubRegistrar:
                 if not token:
                     raise RuntimeError("注册提交后未能在浏览器环境中捕获到有效 Rh-Accesstoken")
 
-                logger.info(f"🎉 注册成功！用户ID: {user_id or '未命名'}, Token: {token[:12]}...")
+                logger.info(f"[SUCCESS] 注册成功！用户ID: {user_id or '未命名'}, Token: {token[:12]}...")
 
                 # 7. 自动推送入库到 RunningHub2API 网关
                 push_ok = push_account_to_rh2api(
@@ -326,6 +343,11 @@ class RunningHubRegistrar:
                     remark=f"UNED自动化注册 (邀请码: {self.invite_code})",
                 )
 
+                try:
+                    from core.live_browser_hub import LiveBrowserHub
+                    LiveBrowserHub.get_hub().detach_page()
+                except Exception:
+                    pass
                 await browser.close()
                 return RegistrationResult(
                     success=True,
@@ -339,6 +361,11 @@ class RunningHubRegistrar:
 
             except Exception as e:
                 logger.error(f"[{email}] 注册流程异常: {e}")
+                try:
+                    from core.live_browser_hub import LiveBrowserHub
+                    LiveBrowserHub.get_hub().detach_page()
+                except Exception:
+                    pass
                 await browser.close()
                 return RegistrationResult(
                     success=False,
@@ -401,6 +428,25 @@ class RunningHubRegistrationFlow(BaseRegistrationFlow):
                 platform=self.platform_name,
                 error=raw_res.error,
             )
+
+    def persist(self, context: FlowContext, result: FlowRegistrationResult) -> bool:
+        from .runninghub2api_sync import save_runninghub_account_to_db
+        raw_res = result.metadata.get("raw_res")
+        pwd = result.metadata.get("password") or getattr(raw_res, "password", "")
+        uid = result.metadata.get("user_id") or getattr(raw_res, "user_id", "")
+        invite = context.metadata.get("invite_code") or DEFAULT_INVITE_CODE
+        return save_runninghub_account_to_db(
+            email=result.email,
+            token=result.access_token,
+            password=pwd,
+            user_id=uid,
+            credits=result.credits or 1000,
+            invite_code=invite,
+            cookies=result.cookies,
+            proxy_used=context.proxy or "",
+            payload=context.extra_payload,
+            db_path=context.db_path,
+        )
 
     def push(self, context: FlowContext, result: FlowRegistrationResult) -> bool:
         user_id = result.metadata.get("user_id") or result.email

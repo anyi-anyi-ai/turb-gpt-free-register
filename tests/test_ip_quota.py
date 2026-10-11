@@ -91,11 +91,37 @@ def test_strict_same_country_policy():
 
     # check_alive=True 时在同国代理池中轮换
     with patch.dict(proxy_cfg.PROXY_COUNTRY_POOLS, {"JP": ["http://JP:token@127.0.0.1:2260"]}):
-        new_p = proxy_cfg.pick_proxy_for_account(account, check_alive=True)
-        assert "JP" in new_p
+        with patch("core.continent_proxy_router.check_proxy_alive", return_value=True):
+            new_p = proxy_cfg.pick_proxy_for_account(account, check_alive=True)
+            assert "JP" in new_p
 
     # 不存在的国家严格阻断
     bad_account = {"email": "bad@example.com", "country": "ZZ"}
     with pytest.raises(RuntimeError) as exc_info:
         proxy_cfg.pick_proxy_for_account(bad_account)
     assert "严格同国策略已阻止跨国请求" in str(exc_info.value)
+
+
+def test_captcha_strike_and_blacklist_advances(clean_quota_mgr):
+    with patch.object(clean_quota_mgr, "_save_to_storage"):
+        with patch.dict(proxy_cfg.PROXY_COUNTRY_POOLS, {"US": ["http://US:token@127.0.0.1:2260"]}):
+            # 获取初始会话：US.sess_1
+            p1 = clean_quota_mgr.get_registration_proxy("US")
+            assert "US.sess_1" in p1
+            assert clean_quota_mgr.is_proxy_blacklisted(p1) is False
+
+            # 第 1 次触发 Turnstile：记录 strike=1，尚未黑名单
+            s1 = clean_quota_mgr.record_captcha_strike(p1, reason="Cloudflare Turnstile", country="US")
+            assert s1 == 1
+            assert clean_quota_mgr.is_proxy_blacklisted(p1) is False
+
+            # 第 2 次触发 Turnstile：达到 2 次，正式拉黑并步进
+            s2 = clean_quota_mgr.record_captcha_strike(p1, reason="Cloudflare Turnstile", country="US")
+            assert s2 == 2
+            assert clean_quota_mgr.is_proxy_blacklisted(p1) is True
+
+            # 再次获取：自动跳过已被拉黑的 sess_1，分配全新的 sess_2
+            p2 = clean_quota_mgr.get_registration_proxy("US")
+            assert "US.sess_2" in p2
+            assert clean_quota_mgr.is_proxy_blacklisted(p2) is False
+

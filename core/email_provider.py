@@ -20,7 +20,7 @@ from typing import Iterable
 
 logger = logging.getLogger(__name__)
 
-_VALID_SOURCES = ("outlook", "generic_api", "imap", "cloudflare_domain", "cloudflare", "gptmail", "mailnest", "cloudmail", "remail")
+_VALID_SOURCES = ("outlook", "generic_api", "imap", "cloudflare_domain", "cloudflare", "gptmail", "mailnest", "cloudmail", "remail", "uned")
 
 
 def parse_email_sources(value=None) -> list[str]:
@@ -48,7 +48,7 @@ def parse_email_sources(value=None) -> list[str]:
     return out or ["outlook"]
 
 
-def _pick_from_source(source: str) -> str:
+def _pick_from_source(source: str, service: str = "chatgpt") -> str:
     if source == "gptmail":
         from core.gptmail_client import pick_account
         return pick_account().email
@@ -73,18 +73,24 @@ def _pick_from_source(source: str) -> str:
     if source == "remail":
         from core.remail_client import pick_account
         return pick_account().email
+    if source == "uned":
+        from core.db.email_pool import _claim_next_email_from_source
+        claimed = _claim_next_email_from_source("uned", for_service=service)
+        if not claimed or not claimed.get("email"):
+            raise RuntimeError("UNED 学生邮箱池已无可用的邮箱")
+        return str(claimed["email"]).strip()
     from core.outlook_client import pick_account
-    return pick_account().email
+    return pick_account(service=service).email
 
 
-def acquire_email() -> str:
+def acquire_email(service: str = "chatgpt") -> str:
     """根据 EMAIL_SOURCE 领取一个用于注册的邮箱地址；多个来源时按顺序兜底。"""
     sources = parse_email_sources()
     last_exc: Exception | None = None
     for source in sources:
         try:
-            email = _pick_from_source(source)
-            logger.info(f"[EmailProvider] 使用邮箱来源: {source}, email={email}")
+            email = _pick_from_source(source, service=service)
+            logger.info(f"[EmailProvider] 使用邮箱来源: {source} (服务={service}), email={email}")
             return email
         except Exception as exc:
             last_exc = exc
@@ -93,17 +99,17 @@ def acquire_email() -> str:
     raise RuntimeError(f"所有邮箱来源均领取失败: {sources}; last={last_exc}")
 
 
-def acquire_email_from_source(source: str) -> str:
+def acquire_email_from_source(source: str, service: str = "chatgpt") -> str:
     """从调用方指定的单一来源领取邮箱，不受 EMAIL_SOURCE 兜底顺序影响。"""
     source = str(source or "").strip().lower()
     if source not in _VALID_SOURCES:
         raise ValueError(f"不支持的邮箱来源: {source}")
-    email = _pick_from_source(source)
-    logger.info("[EmailProvider] 指定来源领取邮箱: source=%s, email=%s", source, email)
+    email = _pick_from_source(source, service=service)
+    logger.info("[EmailProvider] 指定来源领取邮箱: source=%s (服务=%s), email=%s", source, service, email)
     return email
 
 
-def acquire_email_after_input(email: str | None = None) -> str:
+def acquire_email_after_input(email: str | None = None, service: str = "chatgpt") -> str:
     """在浏览器已找到邮箱输入框后领取邮箱。
 
     浏览器驱动把“找到输入框”和“领取邮箱”拆成两个阶段，避免页面加载、风控
@@ -117,10 +123,13 @@ def acquire_email_after_input(email: str | None = None) -> str:
 
     if not bool(getattr(_email_cfg, "USE_EMAIL_SERVICE", False)):
         raise RuntimeError("页面已找到邮箱输入框，但自动取邮箱未启用且未配置 REGISTER_EMAIL")
-    allocated = str(acquire_email() or "").strip()
+    if service and service != "chatgpt":
+        allocated = str(acquire_email(service=service) or "").strip()
+    else:
+        allocated = str(acquire_email() or "").strip()
     if not allocated:
         raise RuntimeError("邮箱服务返回了空邮箱地址")
-    logger.info("[EmailProvider] 已找到邮箱输入框，开始分配邮箱: %s", allocated)
+    logger.info("[EmailProvider] 已找到邮箱输入框，开始分配邮箱 (服务=%s): %s", service, allocated)
     return allocated
 
 
@@ -150,6 +159,8 @@ def resolve_email_source(email: str) -> str:
         return "remail"
 
     from core import db
+    if email and email.lower().endswith("@alumno.uned.es"):
+        return "uned"
     if db.get_imap_email_by_email(email):
         return "imap"
     if db.get_generic_api_email_by_email(email):
@@ -270,8 +281,32 @@ def wait_for_otp(
     if source == "remail":
         from core.remail_client import fetch_latest_otp
         return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
+    if source in ("outlook", "uned"):
+        from core.outlook_client import fetch_latest_otp
+        return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
     from core.outlook_client import fetch_latest_otp
     return fetch_latest_otp(email, after_ts=after_ts, **extra_kwargs)
+
+
+def wait_for_password_reset_link(
+    email: str,
+    after_ts: float | None = None,
+    max_wait: int = 60,
+    email_source: str | None = None,
+) -> str:
+    """等待并获取该邮箱最新收到的 OpenAI 密码重置安全链接。"""
+    source = (
+        _normalize_explicit_email_source(email_source)
+        or _registered_email_source(email)
+        or resolve_email_source(email)
+    )
+    if source == "outlook":
+        from core.outlook_client import fetch_latest_password_reset_link
+        return fetch_latest_password_reset_link(email, after_ts=after_ts, max_wait=max_wait)
+
+    # 兜底也调用 outlook_client
+    from core.outlook_client import fetch_latest_password_reset_link
+    return fetch_latest_password_reset_link(email, after_ts=after_ts, max_wait=max_wait)
 
 
 def email_material_line(email: str, source: str | None = None) -> str:

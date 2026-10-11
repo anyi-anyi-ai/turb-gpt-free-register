@@ -8,11 +8,23 @@ import re
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from config import cloakbrowser as _cfg
 
 logger = logging.getLogger(__name__)
+
+try:
+    from selenium.common.exceptions import TimeoutException, WebDriverException
+except ImportError:
+    class WebDriverException(Exception):  # type: ignore
+        """Selenium WebDriverException fallback when selenium is not installed."""
+        pass
+
+    class TimeoutException(WebDriverException):  # type: ignore
+        """Selenium TimeoutException fallback when selenium is not installed."""
+        pass
 
 
 @dataclass
@@ -248,7 +260,6 @@ class CloakSeleniumDriver:
         try:
             self.page.goto(url, wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
         except Exception as exc:
-            from selenium.common.exceptions import TimeoutException, WebDriverException
             if "timeout" in str(exc).lower():
                 raise TimeoutException(str(exc)) from exc
             raise WebDriverException(str(exc)) from exc
@@ -257,16 +268,15 @@ class CloakSeleniumDriver:
         try:
             self.page.go_back(wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
         except Exception as exc:
-            from selenium.common.exceptions import TimeoutException, WebDriverException
             if "timeout" in str(exc).lower():
                 raise TimeoutException(str(exc)) from exc
             raise WebDriverException(str(exc)) from exc
 
-    def refresh(self) -> None:
+    def refresh(self, timeout_ms: int | None = None) -> None:
         try:
-            self.page.reload(wait_until="domcontentloaded", timeout=self._page_load_timeout_ms)
+            to = timeout_ms if timeout_ms is not None else self._page_load_timeout_ms
+            self.page.reload(wait_until="domcontentloaded", timeout=to)
         except Exception as exc:
-            from selenium.common.exceptions import TimeoutException, WebDriverException
             if "timeout" in str(exc).lower():
                 raise TimeoutException(str(exc)) from exc
             raise WebDriverException(str(exc)) from exc
@@ -453,12 +463,22 @@ class CloakSeleniumDriver:
 
     def quit(self) -> None:
         try:
+            from core.live_browser_hub import LiveBrowserHub
+            LiveBrowserHub.get_hub().detach_page()
+        except Exception:
+            pass
+        try:
             if self.browser:
                 self.browser.close()
         except Exception:
             pass
 
     def close(self) -> None:
+        try:
+            from core.live_browser_hub import LiveBrowserHub
+            LiveBrowserHub.get_hub().detach_page()
+        except Exception:
+            pass
         try:
             if self.page:
                 self.page.close()
@@ -511,9 +531,10 @@ def _detect_cloak_exit_geo(proxy_url: str | None = None) -> dict:
                 "org": data.get("org") or data.get("isp") or (data.get("connection") or {}).get("org"),
             }
             if geo.get("country") or geo.get("timezone"):
+                safe_city = str(geo.get("city") or "?").encode("ascii", "replace").decode("ascii")
                 logger.info(
                     "[Cloak] 出口IP地理信息：ip=%s country=%s city=%s timezone=%s",
-                    geo.get("ip") or "?", geo.get("country") or "?", geo.get("city") or "?", geo.get("timezone") or "?",
+                    geo.get("ip") or "?", geo.get("country") or "?", safe_city, geo.get("timezone") or "?",
                 )
                 return geo
         except Exception as exc:
@@ -574,6 +595,9 @@ def build_cloak_driver(
     country: str | None = None,
     storage_state: dict | str | None = None,
     headless: bool | None = None,
+    fingerprint_seed: str | None = None,
+    account_email: str | None = None,
+    user_data_dir: str | None = None,
 ) -> tuple[CloakSeleniumDriver, CloakOpenResult]:
     """启动 CloakBrowser 并返回 Selenium 风格 driver。
 
@@ -582,15 +606,32 @@ def build_cloak_driver(
     proxy="..." 时使用指定代理。
     storage_state: 登录态字典或路径，注入免密秒进。
     headless: 覆盖全局无头设置。
+    fingerprint_seed: 账号专属指纹种子；留空且未配全局 Seed 时自动从 account_email 派生。
+    account_email: 账号邮箱，用于确定性指纹派生。
+    user_data_dir: 显式覆盖持久化数据目录路径。
     """
     allocated_proxy = None
     if proxy is None and bool(getattr(_cfg, "CLOAK_USE_PROXY", True)):
         try:
             from config.proxy import pick_proxy
-            proxy = pick_proxy(country=country, for_registration=True)
-            allocated_proxy = proxy
-        except Exception:
-            proxy = None
+            from core.continent_proxy_router import check_proxy_tunnel_alive
+            from core.ip_quota_manager import ip_quota_manager
+            
+            for _attempt in range(5):
+                proxy = pick_proxy(country=country, for_registration=True)
+                if proxy:
+                    if check_proxy_tunnel_alive(proxy, target_host="chatgpt.com", target_port=443, timeout=3.0):
+                        allocated_proxy = proxy
+                        break
+                    else:
+                        logger.warning("[前置检测] 代理 HTTP CONNECT 隧道不可用: %s，自动记录失败并步进重试 (%d/5)", proxy, _attempt + 1)
+                        ip_quota_manager.record_proxy_failure(proxy, reason="pre_check_tunnel_failed", country=country)
+                        proxy = None
+            if not allocated_proxy:
+                raise RuntimeError("连续 5 次前置代理隧道检测失败，判定为代理网关或网络整体异常")
+        except Exception as exc:
+            if not allocated_proxy:
+                raise RuntimeError(f"代理分配或前置检测异常: {exc}")
 
     try:
         try:
@@ -599,9 +640,24 @@ def build_cloak_driver(
             raise RuntimeError("未安装 cloakbrowser，请执行：pip install cloakbrowser") from exc
 
         launch_args = list(getattr(_cfg, "CLOAK_EXTRA_ARGS", []) or [])
-        seed = str(getattr(_cfg, "CLOAK_FINGERPRINT_SEED", "") or "").strip()
+        global_seed = str(getattr(_cfg, "CLOAK_FINGERPRINT_SEED", "") or "").strip()
+        if global_seed:
+            seed = global_seed
+        elif fingerprint_seed:
+            seed = str(fingerprint_seed).strip()
+        elif account_email:
+            try:
+                from core.fingerprint import derive_account_fingerprint_seed
+                seed = derive_account_fingerprint_seed(account_email)
+            except Exception:
+                seed = ""
+        else:
+            seed = ""
+
         if seed:
             launch_args.append(f"--fingerprint={seed}")
+
+        profile_id = f"cloak_{seed}" if seed else "cloakbrowser"
 
         proxy_url = _normalize_proxy(proxy) if bool(getattr(_cfg, "CLOAK_USE_PROXY", True)) else None
         locale_opts = _build_cloak_locale_options(proxy_url)
@@ -622,18 +678,31 @@ def build_cloak_driver(
         if not opts.get("headless"):
             wx, wy, ww, wh = _next_window_position()
             launch_args.extend([f"--window-position={wx},{wy}", f"--window-size={ww},{wh}"])
+        # 深度省流：按大洲划分共享静态响应体磁盘缓存 (--disk-cache-dir)，实现跨账号静态资源秒级复用
+        try:
+            from config import browser as _browser_cfg
+            if bool(getattr(_browser_cfg, "BROWSER_SHARED_CACHE_ENABLED", True)):
+                from core.continent_proxy_router import get_continent
+                cache_continent = get_continent(country or "US")
+                cache_root = Path(getattr(_browser_cfg, "BROWSER_SHARED_CACHE_ROOT", "data/browser_cache")) / cache_continent
+                cache_root.mkdir(parents=True, exist_ok=True)
+                launch_args.append(f"--disk-cache-dir={cache_root.resolve()}")
+                logger.info("[Cloak] 挂载大洲静态磁盘缓存: continent=%s path=%s", cache_continent, cache_root.resolve())
+        except Exception as cache_err:
+            logger.debug("[Cloak] 配置共享磁盘缓存异常: %s", cache_err)
+
         if launch_args:
             opts["args"] = launch_args
         license_key = str(getattr(_cfg, "CLOAK_LICENSE_KEY", "") or "").strip()
         if license_key:
             opts["license_key"] = license_key
 
-        user_data_dir = str(getattr(_cfg, "CLOAK_USER_DATA_DIR", "") or "").strip()
+        effective_user_data_dir = str(user_data_dir or getattr(_cfg, "CLOAK_USER_DATA_DIR", "") or "").strip()
         logger.info(
-            "[Cloak] 启动 CloakBrowser：headless=%s humanize=%s geoip=%s proxy=%s locale=%s timezone=%s accept_language=%s persistent=%s has_storage_state=%s",
-            opts.get("headless"), opts.get("humanize"), opts.get("geoip"),
+            "[Cloak] 启动 CloakBrowser：profile_id=%s seed=%s headless=%s humanize=%s geoip=%s proxy=%s locale=%s timezone=%s accept_language=%s persistent=%s has_storage_state=%s",
+            profile_id, seed or "随机", opts.get("headless"), opts.get("humanize"), opts.get("geoip"),
             proxy_url or "无", opts.get("locale") or "自动/默认", opts.get("timezone") or "自动/默认",
-            locale_opts.get("accept_language") or "自动/默认", bool(user_data_dir), bool(storage_state),
+            locale_opts.get("accept_language") or "自动/默认", bool(effective_user_data_dir), bool(storage_state),
         )
         context_kwargs = {}
         if locale_opts.get("locale"):
@@ -645,8 +714,8 @@ def build_cloak_driver(
         if storage_state:
             context_kwargs["storage_state"] = storage_state
 
-        if user_data_dir:
-            context = launch_persistent_context(user_data_dir, **opts)
+        if effective_user_data_dir:
+            context = launch_persistent_context(effective_user_data_dir, **opts)
             page = context.new_page()
             browser = getattr(context, "browser", None) or context
             # persistent context 的 locale/timezone 已通过 launch_persistent_context 参数传入。
@@ -656,7 +725,18 @@ def build_cloak_driver(
             page = context.new_page()
 
         driver = CloakSeleniumDriver(browser=browser, context=context, page=page)
+        driver._proxy_url = proxy or allocated_proxy or proxy_url
+        driver._proxy_country = country
         driver._is_headless = bool(opts.get("headless"))
+
+        # 挂载 Web 实时画中画/远程交互中心 (CDP Screencast)
+        try:
+            from core.live_browser_hub import LiveBrowserHub
+            is_headed = not bool(opts.get("headless"))
+            LiveBrowserHub.get_hub().attach_page(page, auto_open=is_headed)
+        except Exception as hub_err:
+            logger.debug(f"[LiveBrowser] 自动挂载 CDP 视窗失败: {hub_err}")
+
         if not opts.get("headless"):
             try:
                 from core.cloudflare_turnstile import bring_browser_window_to_front
@@ -667,7 +747,17 @@ def build_cloak_driver(
         # 避免 Cloak 注册流程里出现 `[Roxy注册]`。
         driver._registration_log_prefix = "[Cloak注册]"
         driver.set_page_load_timeout(int(getattr(_cfg, "CLOAK_SELENIUM_TIMEOUT", 90) or 90))
-        return driver, CloakOpenResult(raw={"driver": "cloakbrowser", "proxy": proxy_url, "locale": locale_opts, "options": {k: v for k, v in opts.items() if k != "license_key"}})
+        return driver, CloakOpenResult(
+            profile_id=profile_id,
+            raw={
+                "driver": "cloakbrowser",
+                "profile_id": profile_id,
+                "fingerprint_seed": seed,
+                "proxy": proxy_url,
+                "locale": locale_opts,
+                "options": {k: v for k, v in opts.items() if k != "license_key"},
+            },
+        )
     except Exception as exc:
         if allocated_proxy:
             try:

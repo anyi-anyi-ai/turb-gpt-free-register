@@ -36,10 +36,32 @@ WARMING_TYPE_SPEED_WPM: int = 180
 WARMING_UPVOTE_PROBABILITY: float = 0.25
 
 # 对话完成后复制回复 (Copy) 的概率
-WARMING_COPY_PROBABILITY: float = 0.40
+WARMING_COPY_PROBABILITY: float = 0.35
+
+# 生成完成后上下微调滚屏阅读理解概率 (50% 概率做 2~4 次微调滚屏)
+WARMING_READ_SCROLL_PROBABILITY: float = 0.50
+
+# 交互中途或收尾时点击侧边栏旧会话翻阅停留 5~10 秒的概率 (15%)
+WARMING_PAST_CHAT_PROBABILITY: float = 0.15
+
+# 用户人格分布权重矩阵 (Persona Matrix，总和 100)
+PERSONA_WEIGHTS: dict[str, int] = {
+    "workplace_efficiency": 25,       # 职场白领 / 效率工具人 (25%)
+    "student_lifelong_learning": 25,  # 在校学生 / 终身学习者 (25%)
+    "daily_lifestyle": 20,            # 日常技术生活探索者 (20%)
+    "programmer_geek": 15,            # 程序员 / 极客 (15%)
+    "travel_and_culture": 15,         # 旅行与泛文化爱好者 (15%)
+}
 
 # 本地日常语料库相对路径
 WARMING_CORPUS_FILE: str = "config/prompts_corpus.json"
+
+# 是否在养号/自愈时执行拟人问答对话：True=执行拟人问答对话，False=仅快速验证登录态并捕获 StorageState 免登凭证（极省流量模式）
+# 注意：新注册账号默认绝不执行拟人问答；自愈/养号默认以低流量快速自愈为主，可选开启问答
+WARMING_ENABLE_DIALOGUE: bool = False
+
+# 拟人问答交互轮数（默认 2 轮）
+WARMING_DIALOGUE_TURNS: int = 2
 
 # 是否优先复用账号注册时记录的原代理
 WARMING_USE_STICKY_PROXY: bool = True
@@ -60,6 +82,11 @@ apply_env_overrides(globals(), {
     'WARMING_TYPE_SPEED_WPM': 'int',
     'WARMING_UPVOTE_PROBABILITY': 'float',
     'WARMING_COPY_PROBABILITY': 'float',
+    'WARMING_READ_SCROLL_PROBABILITY': 'float',
+    'WARMING_PAST_CHAT_PROBABILITY': 'float',
     'WARMING_CORPUS_FILE': 'str',
+    'WARMING_ENABLE_DIALOGUE': 'bool',
+    'WARMING_DIALOGUE_TURNS': 'int',
     'WARMING_USE_STICKY_PROXY': 'bool',
 })
+

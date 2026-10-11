@@ -1,0 +1,36 @@
+import sys, time
+sys.stdout.reconfigure(encoding='utf-8')
+from playwright.sync_api import sync_playwright
+
+proxy = {'server': 'http://127.0.0.1:2260', 'username': 'NL', 'password': 'resin_proxy_c3d7b8e1f0a2496582d9183b'}
+
+def add_asset_blocking(page):
+    page.route("**/*.{woff,woff2,ttf,eot,png,jpg,jpeg,gif,svg,ico}", lambda r: r.abort())
+    page.route("**/gtm.js**", lambda r: r.abort())
+    page.route("**/google-analytics.com/**", lambda r: r.abort())
+    page.route("**/googletagmanager.com/**", lambda r: r.abort())
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True, proxy=proxy, args=["--disable-blink-features=AutomationControlled"])
+    ctx = browser.new_context(locale='es-ES', viewport={'width': 1280, 'height': 800})
+    page = ctx.new_page()
+    add_asset_blocking(page)
+
+    t0 = time.time()
+    login_url = "https://sso.uned.es/sso/index.aspx?URL=https%3a%2f%2flogin.uned.es%2fssouned%2flogin.jsp"
+    page.goto(login_url, wait_until='commit', timeout=20000)
+    page.wait_for_selector('#ContentPlaceHolder1_ssousername', timeout=12000)
+    page.fill('#ContentPlaceHolder1_ssousername', 'glai1')
+    page.fill('#ContentPlaceHolder1_password', 'Uned@1901!Zhang#88')
+    page.click('#ContentPlaceHolder1_Button1')
+    page.wait_for_timeout(4000)
+    print(f'Login took {time.time()-t0:.2f}s, URL: {page.url}')
+    body = page.locator("body").inner_text()
+    print('Body snippet:', repr(body[:200]))
+
+    if "login.jsp" in page.url or "salida.aspx" in page.url or "sso.uned.es" not in page.url:
+        print("SSO Login successful!")
+        page.goto('https://serviwebng.uned.es/correo/activar-correo.asp', wait_until='commit', timeout=20000)
+        page.wait_for_timeout(3000)
+        print('Serviweb text:\n', repr(page.locator('body').inner_text()[:300]))
+    browser.close()

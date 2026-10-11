@@ -21,17 +21,36 @@ PROXY_POOL = [
 ]
 
 # 按国家划分的高质量/专属代理池（ISO 3166-1 alpha-2 两位大写代码）。
-# 严格仅保留实测具备有效 0-盾直通 ChatGPT 节点的国家：
 PROXY_COUNTRY_POOLS: dict[str, list[str]] = {
     "SG": [
+        "http://Asia:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
         "http://azureuser:AzStudent@liT0SdIuUc!@4.193.130.57:10808",
-        "http://SG:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260",
     ],
-    "US": ["http://US:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260"],
-    "JP": ["http://JP:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260"],
-    "DE": ["http://DE:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260"],
-    "NL": ["http://NL:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260"],
-    "GB": ["http://GB:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260"],
+    "US": [
+        "http://US:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+        "http://US:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260",
+    ],
+    "JP": [
+        "http://Asia:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+    ],
+    "DE": [
+        "http://Europe:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+        "http://Europe:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260",
+    ],
+    "NL": [
+        "http://Europe:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+        "http://Europe:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260",
+    ],
+    "GB": [
+        "http://Europe:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+        "http://Europe:resin_proxy_c3d7b8e1f0a2496582d9183b@4.193.130.57:2260",
+    ],
+    "FR": [
+        "http://FR:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+    ],
+    "SE": [
+        "http://SE:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
+    ],
 }
 
 # 注册默认首选国家代码。留空时随机从 PROXY_COUNTRY_POOLS 抽取。
@@ -80,7 +99,7 @@ PLAN_CHECK_JITTER = 0.8
 #   "auto"  / True  = 自动容灾模式：优先使用 7天 Dedicated 专享出口，若提取失败平滑切回本地 Resin 粘性代理池
 #   "forced"        = 强制模式：若链式专享出口提取失败直接报错阻断，严禁降级
 #   "false" / False = 彻底关闭链式中转，注册直接走本地 Resin 粘性代理池 (127.0.0.1:2260)
-DYNAMIC_RESIDENTIAL_ENABLED: str = "dedicated"
+DYNAMIC_RESIDENTIAL_ENABLED: str = "auto"
 
 # 动态住宅提取 API 接口地址（如 rapidproxy 接口）
 DYNAMIC_RESIDENTIAL_API_URL: str = "https://www.rapidproxy.io/api/proxy/get_proxy_ip?num=1&regions=GLOBAL&protocol=http&return_type=txt&lb=1&sb="
@@ -91,8 +110,8 @@ DYNAMIC_RESIDENTIAL_REGIONS: list[str] = ["US:10"]
 # 单个动态住宅出口 IP 允许注册的最大账号数（默认 1，节约住宅 IP 并防止同 IP 关联封禁）
 DYNAMIC_RESIDENTIAL_MAX_ACCOUNTS_PER_IP: int = 1
 
-# 本地透明链式中转代理监听地址与端口（注册机指纹浏览器统一连到此端口）
-DYNAMIC_RESIDENTIAL_LOCAL_HOST: str = "127.0.0.1"
+# 本地透明链式中转代理监听地址与端口（注册机指纹浏览器统一连到此端口，0.0.0.0 支持模拟器内网 10.0.2.2 穿透）
+DYNAMIC_RESIDENTIAL_LOCAL_HOST: str = "0.0.0.0"
 DYNAMIC_RESIDENTIAL_LOCAL_PORT: int = 28888
 
 # 高速上游网关入口（用于加速本地连接动态住宅节点，由 88.88 节点承载）
@@ -130,8 +149,19 @@ def pick_proxy(country: str | None = None, for_registration: bool = False) -> st
     池为空时返回空串（即不使用代理）。
     """
     if for_registration:
-        dyn_mode = str(globals().get("DYNAMIC_RESIDENTIAL_ENABLED", "dedicated")).strip().lower()
-        if dyn_mode in ("true", "1", "yes", "on", "auto", "forced", "dedicated", "api"):
+        dyn_mode = str(globals().get("DYNAMIC_RESIDENTIAL_ENABLED", "auto")).strip().lower()
+
+        # 1. 优先走 IPQuotaManager 本地 Resin 粘性网关 (直接按 Session 隔离，毫秒级就绪且具备 7 天粘性)
+        try:
+            from core.ip_quota_manager import ip_quota_manager
+            resin_p = ip_quota_manager.get_registration_proxy(country=country)
+            if resin_p:
+                return resin_p
+        except Exception:
+            pass
+
+        # 2. 回退到 DynamicResidentialProxyManager 链式专享池
+        if dyn_mode in ("true", "1", "yes", "on", "forced", "dedicated", "api"):
             try:
                 from core.dynamic_residential_proxy import dynamic_residential_manager
                 if dynamic_residential_manager.enabled:
@@ -141,14 +171,7 @@ def pick_proxy(country: str | None = None, for_registration: bool = False) -> st
             except Exception as exc:
                 if dyn_mode == "forced":
                     raise RuntimeError(f"[链式代理] 强制模式 (forced) 生效中，但提取出口 IP 失败: {exc}")
-                # auto/dedicated 模式静默回退到粘性代理池
                 pass
-
-        try:
-            from core.ip_quota_manager import ip_quota_manager
-            return ip_quota_manager.get_registration_proxy(country=country)
-        except Exception:
-            pass
 
     target = str(country or "").strip().upper()
     _country_map = {

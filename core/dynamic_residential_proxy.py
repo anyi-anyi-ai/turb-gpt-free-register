@@ -148,11 +148,14 @@ class DynamicResidentialProxyManager:
     @property
     def upstream_proxy(self) -> str:
         from config import proxy as proxy_cfg
-        return str(getattr(
-            proxy_cfg,
-            "DYNAMIC_RESIDENTIAL_UPSTREAM_PROXY",
-            "http://FAST_UPSTREAM:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260",
-        ))
+        explicit = getattr(proxy_cfg, "DYNAMIC_RESIDENTIAL_UPSTREAM_PROXY", None)
+        if explicit and str(explicit).strip():
+            return str(explicit).strip()
+        try:
+            from core.relay.manager import get_active_upstream_relay
+            return get_active_upstream_relay()
+        except Exception:
+            return "http://FAST_UPSTREAM:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260"
 
     @property
     def max_lifetime_seconds(self) -> float:
@@ -214,11 +217,6 @@ class DynamicResidentialProxyManager:
         if url.username or url.password:
             user = url.username or ""
             pwd = url.password or ""
-            with self._lock:
-                self._upstream_rr_counter += 1
-                counter = self._upstream_rr_counter
-            if "." not in user:
-                user = f"{user}.rr_{counter}"
             auth = "Basic " + base64.b64encode(f"{user}:{pwd}".encode()).decode()
         return host, port, auth
 
@@ -290,10 +288,10 @@ class DynamicResidentialProxyManager:
                     res_auth = self._current_proxy_auth
 
                 try:
-                    # 1. 第一跳：本地 -> 88.88 中转 -> 专享出口节点的隧道
-                    tunnel_sock = self._connect_to_upstream(res_host, res_port, timeout=12.0)
+                    # 1. 第一跳：本地 -> 88.88 中转 -> 专享出口节点的隧道 (超时 8.0s)
+                    tunnel_sock = self._connect_to_upstream(res_host, res_port, timeout=8.0)
 
-                    # 2. 第二跳：专享出口节点 -> 目标域名 (HTTPS CONNECT)
+                    # 2. 第二跳：专享出口节点 -> 目标域名 (HTTPS CONNECT, 超时 8.0s)
                     if method == "CONNECT":
                         connect_headers = [
                             f"CONNECT {target_uri} HTTP/1.1",
@@ -306,7 +304,7 @@ class DynamicResidentialProxyManager:
                         tunnel_sock.sendall(connect_cmd)
 
                         resp_bytes = b""
-                        tunnel_sock.settimeout(12.0)
+                        tunnel_sock.settimeout(8.0)
                         while b"\r\n\r\n" not in resp_bytes:
                             chunk = tunnel_sock.recv(4096)
                             if not chunk:
@@ -396,25 +394,58 @@ class DynamicResidentialProxyManager:
         if self._dedicated_pools:
             return self._dedicated_pools
 
-        candidates_map = {"US": [], "DE": [], "JP": [], "SG": [], "ALL": []}
+        candidates_map = {"US": [], "DE": [], "EU": [], "JP": [], "SG": [], "ALL": []}
 
-        # 优先加载最新大批次专享文件 (1005 / 1004)
-        search_paths = [
-            Path(r"C:\Users\hd\Downloads\proxies_output_20261005.txt"),
-            Path(r"C:\Users\hd\Downloads\all_accounts_proxies_20261004.txt"),
-            Path(r"F:\github\resin\pools\proxies_americas.txt"),
-            Path(r"F:\github\resin\pools\proxies_europe.txt"),
-            Path(r"F:\github\resin\pools\proxies_asia.txt"),
-            Path(r"F:\github\resin\pools\quality\proxies_US.txt"),
-            Path(r"F:\github\resin\pools\quality\proxies_DE.txt"),
-            Path(r"F:\github\resin\pools\quality\proxies_JP.txt"),
-            Path(r"F:\github\resin\pools\quality\proxies_SG.txt"),
-        ]
+        # 动态扫描用户最新的 Dedicated 专享节点池与导出目录，按修改时间倒序（最新鲜优先）
+        raw_paths: list[Path] = []
+        pools_dir = Path(r"F:\github\resin\pools")
+        if pools_dir.exists():
+            for p in pools_dir.rglob("*.txt"):
+                p_name = p.name.lower()
+                # 排除 CDN、白名单/黑名单元数据文件及未经清洗的杂质 dump
+                if any(bad in p_name for bad in ("cloudflare", "cloudfront", "fastly", "google", "private", "excluded", "harvested", "daily_top", "ai_clean", "example")):
+                    continue
+                if p.stat().st_size < 350:
+                    continue
+                raw_paths.append(p)
+
+        downloads_dir = Path(r"C:\Users\hd\Downloads")
+        if downloads_dir.exists():
+            raw_paths.extend(downloads_dir.glob("proxies_output_*.txt"))
+            raw_paths.extend(downloads_dir.glob("all_accounts_proxies_*.txt"))
+
+        # 按最后修改时间倒序，保证 1008 等最新池排在最前
+        search_paths = sorted(
+            [p for p in raw_paths if p.exists() and p.is_file()],
+            key=lambda x: x.stat().st_mtime,
+            reverse=True,
+        )
 
         loaded_urls = set()
         for p in search_paths:
-            if not p.exists() or p.name.endswith(".json"):
-                continue
+            p_name = p.name.lower()
+            file_region = "OTHER"
+            if "europe" in p_name or "_de" in p_name or "proxies_de" in p_name:
+                file_region = "DE"
+            elif "asia" in p_name or "_jp" in p_name or "proxies_jp" in p_name:
+                file_region = "JP"
+            elif "_sg" in p_name or "proxies_sg" in p_name:
+                file_region = "SG"
+            elif "americas" in p_name or "_us" in p_name or "proxies_us" in p_name:
+                file_region = "US"
+            else:
+                m = re.search(r"proxies_([a-z]{2})\.txt", p_name)
+                if m:
+                    file_region = m.group(1).upper()
+                else:
+                    for cc in ("US", "DE", "JP", "SG", "GB", "FR", "CA", "AU"):
+                        if f"proxies_{cc.lower()}" in p_name:
+                            file_region = cc
+                            break
+
+            if file_region not in candidates_map:
+                candidates_map[file_region] = []
+
             try:
                 # 针对超大文件（如 35MB），流式读取前 5000 条高质量节点以保证秒级启动速度
                 count = 0
@@ -426,7 +457,9 @@ class DynamicResidentialProxyManager:
                             continue
                         loaded_urls.add(line)
                         candidates_map["ALL"].append(line)
-                        candidates_map["US"].append(line)  # 大部分为 US/美洲节点
+                        candidates_map[file_region].append(line)
+                        if file_region == "DE":
+                            candidates_map["EU"].append(line)
                         count += 1
                         if count >= max_lines_per_file:
                             break
@@ -435,17 +468,21 @@ class DynamicResidentialProxyManager:
 
         self._dedicated_pools = candidates_map
         logger.info(
-            "[链式代理] 成功加载 Dedicated 专享节点池: 全局总数=%d",
+            "[链式代理] 成功按区域加载 Dedicated 专享节点池: 全局=%d, US=%d, DE=%d, JP=%d, SG=%d",
             len(candidates_map.get("ALL", [])),
+            len(candidates_map.get("US", [])),
+            len(candidates_map.get("DE", [])),
+            len(candidates_map.get("JP", [])),
+            len(candidates_map.get("SG", [])),
         )
         return self._dedicated_pools
 
     def _probe_dedicated_node(self, host: str, port: int, auth: str | None) -> tuple[bool, str, str]:
-        """通过 88.88 中转对候选 Dedicated 专享节点进行端到端探测。"""
+        """通过 88.88 中转对候选 Dedicated 专享节点进行端到端探测 (超时 3.0s)。"""
         sock = None
         try:
-            # 1. 连 88.88 中转
-            sock = self._connect_to_upstream(host, port, timeout=5.0)
+            # 1. 连 88.88 中转 (6.0s)
+            sock = self._connect_to_upstream(host, port, timeout=6.0)
 
             # 2. 向 Dedicated 发第二层 CONNECT 到 api.ipify.org:443
             headers = [
@@ -458,7 +495,7 @@ class DynamicResidentialProxyManager:
             req_data = ("\r\n".join(headers) + "\r\n\r\n").encode("latin-1")
             sock.sendall(req_data)
 
-            sock.settimeout(5.0)
+            sock.settimeout(6.0)
             resp_bytes = b""
             while b"\r\n\r\n" not in resp_bytes:
                 chunk = sock.recv(4096)
@@ -472,9 +509,10 @@ class DynamicResidentialProxyManager:
                 sock.close()
                 return False, status_line, ""
 
-            # 3. 提取真实出口 IP
+            # 3. 提取真实出口 IP (3.0s)
             ctx = ssl.create_default_context()
             ss = ctx.wrap_socket(sock, server_hostname="api.ipify.org")
+            ss.settimeout(3.0)
             ss.sendall(b"GET /?format=json HTTP/1.1\r\nHost: api.ipify.org\r\nConnection: close\r\n\r\n")
             body = ss.recv(4096).decode("latin-1", errors="ignore")
             ss.close()

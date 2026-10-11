@@ -159,11 +159,21 @@ def _should_disable_failed_registration_email(error: object) -> bool:
     text = str(error or "")
     if not text:
         return False
+    text_lower = text.lower()
     return (
         _is_final_session_access_token_timeout(text)
         or "邮箱提交后进入登录密码页" in text
         or "auth.openai.com/log-in/password" in text
         or "/log-in/password" in text
+        or "user_already_exists" in text_lower
+        or "useralreadyexistserror" in text_lower
+        or "alreadyregisterederror" in text_lower
+        or "account already exists" in text_lower
+        or "already exists for this email" in text_lower
+        or "已在 gpt 注册" in text_lower
+        or "已在gpt注册" in text_lower
+        or "检测到账号已存在" in text
+        or "已有关联的账户" in text
     )
 
 

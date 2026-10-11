@@ -62,7 +62,7 @@ class SunoRegistrationFlow(BaseRegistrationFlow):
         logger.info("[SunoReg] 定位并点击 'Continue with Microsoft' 按钮...")
         ms_btn = driver.page.locator("button:has-text('Continue with Microsoft')").first
         ms_btn.wait_for(timeout=15000)
-        ms_btn.click()
+        ms_btn.click(force=True)
 
         # 等待 Microsoft 登录表单
         logger.info("[SunoReg] 等待 Microsoft 登录页面加载...")
@@ -245,12 +245,16 @@ def run_suno_registration(
     country: str = "US",
     headless: bool = True,
     push_to_gateway: bool = True,
+    otp_max_wait: int = 80,
     db_path: Path | str | None = None,
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """执行单次 Suno 账号全自动自动化注册流水线（走 Microsoft OAuth + Cloudflare Turnstile 自动穿透）。"""
     init_suno_db(db_path)
-    if not proxy:
-        proxy = os.getenv("SUNO_PROXY", "http://127.0.0.1:7890")
+    if proxy and proxy.lower() in ("direct", "none", "local"):
+        proxy = ""
+    elif proxy is None:
+        proxy = os.getenv("SUNO_PROXY") or os.getenv("RESIN_PROXY") or ""
 
     flow = SunoRegistrationFlow(db_path=db_path)
     res = flow.run(

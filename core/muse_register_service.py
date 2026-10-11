@@ -38,12 +38,63 @@ MONTH_NAMES = [
 ]
 
 
+def fetch_muse_otp(
+    student_email: str,
+    forward_outlook: str = "",
+    after_ts: float | None = None,
+    max_wait: int = 75,
+) -> str:
+    """直接通过 Graph API 获取 Muse.ai 发往学生邮箱（经转发至 Outlook）的 6 位数字验证码。"""
+    from core.outlook_client import get_account_context, _http_session, _fetch_via, _parse_email_ts
+    account = None
+    if forward_outlook:
+        account = get_account_context(forward_outlook)
+    if not account:
+        account = get_account_context(student_email)
+    if not account:
+        raise RuntimeError(f"未找到 {forward_outlook} 或 {student_email} 的 Graph 上下文")
+
+    deadline = time.time() + max_wait
+    session = _http_session()
+    logger.info(f"[MuseOTP] 轮询收件箱：{student_email} (转发至 {forward_outlook})，最长等待 {max_wait}s...")
+
+    while time.time() < deadline:
+        emails = _fetch_via(session, "graph", account)
+        for item in emails:
+            ts = _parse_email_ts(item) or 0.0
+            if after_ts and ts < after_ts:
+                continue
+            subject = str(item.get("subject") or "")
+            body = str(item.get("bodyPreview") or item.get("body") or "")
+            text = f"{subject} {body}"
+            sender = str(item.get("from") or item.get("sender") or "").lower()
+            subject_l = subject.lower()
+            text_l = text.lower()
+            is_match = (
+                "muse" in sender or "meta" in sender or
+                "muse" in subject_l or "meta" in subject_l or
+                "code" in subject_l or "verification" in subject_l or
+                "验证" in subject or "账户" in subject or
+                "验证码" in text or "code" in text_l or "verify" in text_l
+            )
+            if is_match:
+                m = re.search(r"验证码\s*(\d{6})", text) or re.search(r"\b(\d{6})\b", text)
+                if m:
+                    code = m.group(1)
+                    logger.info(f"[MuseOTP] 成功解析到 Muse/Meta 验证码: {code} (来源邮件: {subject})")
+                    return code
+        time.sleep(3)
+
+    raise TimeoutError(f"等待 {student_email} 的 Muse 验证码超时（>{max_wait}s）")
+
+
+
 def _is_account_healthy(acc_ctx) -> bool:
     try:
         from core.outlook_client import _fetch_via, _http_session
         s = _http_session()
         emails = _fetch_via(s, "graph", acc_ctx)
-        subjects = [str(e.get("subject") or "").lower() for e in emails[:3]]
+        subjects = [str(e.get("subject") or "").lower() for e in emails[:15]]
         return not any("bloqueada" in sub for sub in subjects)
     except Exception:
         return False
@@ -180,7 +231,11 @@ def _handle_post_signup_flow(page, full_name: str, birth_date: str, invite_code:
         for _ in range(8):
             try:
                 present = page.evaluate("""() => {
-                    const fname = document.querySelector("input[aria-label='First name']") || document.querySelector("input[placeholder='First name']");
+                    const fname = document.querySelector("input[aria-label*='First' i]") || 
+                                  document.querySelector("input[placeholder*='First' i]") ||
+                                  document.querySelector("input[name='first_name']") ||
+                                  document.querySelector("input[aria-label*='名' i]") ||
+                                  document.querySelector("input[placeholder*='名' i]");
                     return !!fname;
                 }""")
                 if present:
@@ -214,8 +269,16 @@ def _handle_post_signup_flow(page, full_name: str, birth_date: str, invite_code:
                     select.dispatchEvent(new Event('input', { bubbles: true }));
                 }
 
-                const fname = document.querySelector("input[aria-label='First name']") || document.querySelector("input[placeholder='First name']");
-                const lname = document.querySelector("input[aria-label='Last name']") || document.querySelector("input[placeholder='Last name']");
+                const fname = document.querySelector("input[aria-label*='First' i]") || 
+                              document.querySelector("input[placeholder*='First' i]") ||
+                              document.querySelector("input[name='first_name']") ||
+                              document.querySelector("input[aria-label*='名' i]") ||
+                              document.querySelector("input[placeholder*='名' i]");
+                const lname = document.querySelector("input[aria-label*='Last' i]") || 
+                              document.querySelector("input[placeholder*='Last' i]") ||
+                              document.querySelector("input[name='last_name']") ||
+                              document.querySelector("input[aria-label*='姓' i]") ||
+                              document.querySelector("input[placeholder*='姓' i]");
                 if (fname) setInputValue(fname, data.first_name);
                 if (lname) setInputValue(lname, data.last_name);
 
@@ -233,16 +296,30 @@ def _handle_post_signup_flow(page, full_name: str, birth_date: str, invite_code:
 
         if filled:
             logger.info(f"[MuseReg] 发现完善资料表单，已填充: {first_name} {last_name} | 生日: {year}-{month:02d}-{day:02d}")
+            try:
+                page.screenshot(path="scratch/muse_form_filled.png")
+            except Exception:
+                pass
             time.sleep(1.0)
-            logger.info("[MuseReg] 点击资料页 Confirm 按钮完成创建 Meta 账号...")
+            logger.info("[MuseReg] 点击资料页确认按钮完成创建 Meta 账号...")
             try:
                 page.evaluate("""() => {
-                    const btn = document.querySelector("button[type='submit']");
+                    const btn = document.querySelector("button[type='submit']") ||
+                                Array.from(document.querySelectorAll("button")).find(b => {
+                                    const t = (b.innerText || '').trim().toLowerCase();
+                                    return t.includes('confirm') || t.includes('continue') || t.includes('save') || t.includes('next') || t.includes('确认') || t.includes('继续') || t.includes('保存');
+                                });
                     if (btn && !btn.disabled) btn.click();
                 }""")
             except Exception:
                 pass
-            time.sleep(8.0)
+            time.sleep(5.0)
+            try:
+                page.screenshot(path="scratch/muse_form_after_submit.png")
+                logger.info(f"[MuseReg] 资料提交后当前 URL: {page.url} | 标题: {page.title()}")
+            except Exception:
+                pass
+            time.sleep(3.0)
 
         # 3. 检查是否有邀请码兑换入口
         if invite_code:
@@ -343,11 +420,16 @@ class MuseRegistrationFlow(BaseRegistrationFlow):
         driver.get(start_url)
         time.sleep(3.5)
 
-        input_selector = "input[placeholder*='email' i], input[type='email'], input[type='text']"
+        input_selector = "input[inputmode='email'], input[autocomplete='username'], input[data-slot='input'], input[placeholder*='email' i], input[placeholder*='邮箱'], input[placeholder*='手机'], input[type='email'], input[type='text'], input"
+        try:
+            driver.page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:
+            pass
+
         try:
             driver.page.wait_for_selector(input_selector, timeout=15000)
         except Exception:
-            login_btn = "button:has-text('Log in'), a:has-text('Log in')"
+            login_btn = "button:has-text('Log in'), a:has-text('Log in'), button:has-text('登录'), a:has-text('登录')"
             if driver.page.locator(login_btn).count() > 0:
                 driver.page.click(login_btn)
                 time.sleep(2)
@@ -360,57 +442,77 @@ class MuseRegistrationFlow(BaseRegistrationFlow):
         driver.page.fill(input_selector, email)
         time.sleep(0.8)
 
-        continue_btn = "button:has-text('Continue'), button[type='submit']"
+        continue_btn = "button[type='submit'], button:has-text('Continue'), button:has-text('继续')"
         driver.page.wait_for_selector(continue_btn, timeout=10000)
         driver.page.click(continue_btn)
-        logger.info("[MuseReg] 已点击 Continue，等待进入验证码核验界面...")
+        logger.info("[MuseReg] 已点击 Continue / 提交，等待进入验证码核验界面...")
 
         # [步骤 3] 等待 OTP 界面并提取
-        otp_selector = "input[autocomplete='one-time-code'], input[maxlength='6'], input[type='text'].sr-only"
+        otp_selector = "input[autocomplete='one-time-code'], input[maxlength='6'], input[type='text'].sr-only, input.sr-only"
         driver.page.wait_for_selector(otp_selector, timeout=15000)
         logger.info("[MuseReg] 验证码输入框已就绪，正在通过 Graph API 轮询收件箱...")
 
-        otp_code = fetch_latest_otp(email, after_ts=start_ts, max_wait=otp_max_wait)
+        otp_code = fetch_muse_otp(student_email=email, forward_outlook=forward_email, after_ts=start_ts, max_wait=otp_max_wait)
         logger.info(f"🎉 [MuseReg] 成功获取到 Muse 6位 OTP 验证码: {otp_code}")
 
-        # [步骤 4] 填入验证码并确认
+        # [步骤 4] 填入验证码并通过 form.requestSubmit() 提交
         logger.info(f"[MuseReg] 正在填入验证码: {otp_code}")
-        driver.page.evaluate("""() => {
-            const inp = document.querySelector("input[autocomplete='one-time-code']") || document.querySelector("input[maxlength='6']");
+        driver.page.evaluate("""(code) => {
+            const inp = document.querySelector('input[autocomplete="one-time-code"]') || document.querySelector('input.sr-only');
             if (inp) {
-                inp.focus();
-                inp.removeAttribute('readonly');
-                inp.removeAttribute('disabled');
-            }
-        }""")
-        time.sleep(0.5)
-        driver.page.keyboard.type(otp_code, delay=80)
-        time.sleep(1.2)
+                const tracker = inp._valueTracker;
+                if (tracker) tracker.setValue("");
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                setter.call(inp, code);
+                inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-        logger.info("[MuseReg] 正在提交验证码 (点击 Confirm)...")
-        driver.page.evaluate("""() => {
-            const btn = Array.from(document.querySelectorAll("button")).find(b => (b.innerText || '').includes('Confirm'));
-            if (btn) {
-                btn.removeAttribute('disabled');
-                btn.click();
+                const form = inp.closest('form') || document.querySelector('form');
+                const btn = document.querySelector('button[type="submit"]') ||
+                            document.querySelector('button[data-pel-click="login_otp_confirm_click"]');
+                if (btn) btn.disabled = false;
+                try {
+                    if (form && typeof form.requestSubmit === 'function') {
+                        form.requestSubmit();
+                    } else if (btn) {
+                        btn.click();
+                    }
+                } catch (e) {
+                    if (btn) btn.click();
+                }
             }
-        }""")
-        time.sleep(1.0)
-        try:
-            driver.page.locator("button:has-text('Confirm')").click(timeout=3000)
-        except Exception:
-            pass
-
-        logger.info("[MuseReg] 已提交验证码，等待登录/后续引导跳转 (10s)...")
-        time.sleep(10.0)
+        }""", otp_code)
+        time.sleep(6.0)
 
         # [步骤 5] 处理新账号引导信息
         _handle_post_signup_flow(driver.page, full_name, birth_date, invite_code=invite_code)
 
-        # [步骤 6] 捕获当前会话所有 Cookie
-        raw_cookies = driver.page.context.cookies()
-        cookies_dict = {c["name"]: c["value"] for c in raw_cookies if c.get("name") and c.get("value")}
-        exp_dict = {c["name"]: int(c["expires"]) for c in raw_cookies if c.get("name") and c.get("expires") and int(c.get("expires", 0)) > 0}
+        # [步骤 6] 捕获当前会话所有 Cookie (带轮询与跳转确认)
+        cookies_dict = {}
+        exp_dict = {}
+        for _wait_turn in range(12):
+            raw_cookies = driver.page.context.cookies()
+            cookies_dict = {c["name"]: c["value"] for c in raw_cookies if c.get("name") and c.get("value")}
+            exp_dict = {c["name"]: int(c["expires"]) for c in raw_cookies if c.get("name") and c.get("expires") and int(c.get("expires", 0)) > 0}
+            if "hatch_sess" in cookies_dict or "hatch_vml" in cookies_dict:
+                break
+            if "muse.ai" not in driver.page.url:
+                try:
+                    driver.page.wait_for_load_state("networkidle", timeout=2000)
+                except Exception:
+                    pass
+            time.sleep(2.0)
+
+        if "hatch_sess" not in cookies_dict and "hatch_vml" not in cookies_dict:
+            logger.info("[MuseReg] 未直接检测到 hatch_sess，尝试直接访问 https://muse.ai/ 触发会话兑换...")
+            try:
+                driver.get("https://muse.ai/")
+                time.sleep(4.0)
+                raw_cookies = driver.page.context.cookies()
+                cookies_dict = {c["name"]: c["value"] for c in raw_cookies if c.get("name") and c.get("value")}
+                exp_dict = {c["name"]: int(c["expires"]) for c in raw_cookies if c.get("name") and c.get("expires") and int(c.get("expires", 0)) > 0}
+            except Exception as e:
+                logger.debug(f"[MuseReg] 兜底跳转异常: {e}")
 
         essential = {k: cookies_dict[k] for k in ("hatch_sess", "hatch_gw", "hatch_vml", "hatch_native_auth_device") if k in cookies_dict}
         logger.info(f"🍪 [MuseReg] 成功截获 {len(cookies_dict)} 个 Cookie，核心项包含: {list(essential.keys())}")
@@ -491,8 +593,10 @@ def run_muse_registration(
         "source": student_info.get("source", "uned"),
     }
 
-    if not proxy:
-        proxy = os.getenv("MUSE_PROXY", "http://US:resin_proxy_c3d7b8e1f0a2496582d9183b@127.0.0.1:2260")
+    if proxy and proxy.lower() in ("direct", "none", "local"):
+        proxy = ""
+    elif proxy is None:
+        proxy = os.getenv("MUSE_PROXY", "")
 
     flow = MuseRegistrationFlow(db_path=p)
     res = flow.run(

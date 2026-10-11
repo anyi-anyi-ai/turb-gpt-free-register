@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 
 from core.gptgrok2api_sync import (
     map_country_to_group_id,
+    format_proxy_for_gptgrok2api,
     GROUP_ID_ASIA,
     GROUP_ID_EUROPE,
     GROUP_ID_AMERICAS,
@@ -11,6 +12,21 @@ from core.gptgrok2api_sync import (
     push_accounts_to_gptgrok2api,
     BATCH_SYNC_SIZE,
 )
+
+
+def test_format_proxy_for_gptgrok2api():
+    # 1. 28888 临时端口自动回退为 Resin 分国代理
+    p = format_proxy_for_gptgrok2api("http://127.0.0.1:28888", country="US", acc_id=10, resin_token="mytoken")
+    assert p == "http://US.sess_10:mytoken@host.docker.internal:2260"
+
+    # 2. 空代理自动回退为 Resin 代理
+    p2 = format_proxy_for_gptgrok2api("", country="JP", acc_id=5, resin_token="mytoken")
+    assert p2 == "http://JP.sess_5:mytoken@host.docker.internal:2260"
+
+    # 3. 正常 127.0.0.1:2260 转换为 host.docker.internal:2260
+    p3 = format_proxy_for_gptgrok2api("http://DE.sess_1:mytoken@127.0.0.1:2260")
+    assert p3 == "http://DE.sess_1:mytoken@host.docker.internal:2260"
+
 
 
 def test_map_country_to_group_id():
