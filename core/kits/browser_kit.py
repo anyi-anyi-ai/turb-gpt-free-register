@@ -93,8 +93,50 @@ class BrowserKit:
 
             return PlaywrightWrapper(pw, browser, context, page)
 
+        elif browser_type == "camoufox":
+            try:
+                from camoufox.sync_api import Camoufox
+                proxy_dict = None
+                if effective_proxy:
+                    proxy_dict = {"server": effective_proxy}
+                cm = Camoufox(
+                    headless=headless,
+                    proxy=proxy_dict,
+                    geoip=True,
+                )
+                browser = cm.start()
+                page = browser.new_page()
+
+                class CamoufoxWrapper:
+                    def __init__(self, cm, browser, page):
+                        self._cm = cm
+                        self.browser = browser
+                        self.page = page
+
+                    def get(self, url: str):
+                        self.page.goto(url)
+
+                    def quit(self):
+                        try:
+                            self.page.close()
+                            self.browser.close()
+                            self._cm.stop()
+                        except Exception:
+                            pass
+
+                logger.info("[BrowserKit] 成功启动 Camoufox (Firefox C++ 内核级无痕隐身驱动)")
+                return CamoufoxWrapper(cm, browser, page)
+            except ImportError:
+                logger.warning("[BrowserKit] 环境未安装 camoufox 库，平滑降级至 Patchright 驱动...")
+                return BrowserKit.launch(
+                    browser_type="patchright",
+                    proxy=proxy,
+                    headless=headless,
+                    account_email=account_email,
+                )
+
         else:
-            raise ValueError(f"不支持的浏览器驱动类型: {browser_type} (支持: cloak, patchright)")
+            raise ValueError(f"不支持的浏览器驱动类型: {browser_type} (支持: cloak, patchright, camoufox)")
 
     @staticmethod
     def close(driver: Any) -> None:

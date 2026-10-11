@@ -37,7 +37,7 @@ class OutlookPlugin(BaseSitePlugin):
     manage_driver_internally = True
     requires_human = False
     default_headless = False
-    target_country = "US"
+    target_country = "DE"
 
     def pick_account(self, specific_email: Any = None) -> Dict[str, Any]:
         """Outlook 为造血机平台，自动生成新邮箱账号，不消费现有邮箱池。"""
@@ -57,6 +57,7 @@ class OutlookPlugin(BaseSitePlugin):
             "--count", str(count),
             "--mode", "cloak",
             "--concurrency", "1",
+            "--timeout", "600",
         ]
         env_copy = os.environ.copy()
         env_copy["FINGERPRINT_BROWSER"] = "cloak"

@@ -115,3 +115,47 @@ class CaptchaKit:
                     hub.detach_page()
                 except Exception:
                     pass
+
+    @staticmethod
+    def solve_perimeterx(page: Any, timeout: float = 20.0) -> bool:
+        """
+        检测并自动穿透 PerimeterX / HUMAN Security 'Press & Hold' 挑战门。
+        结合 BiometricMouse 施加 8~12Hz 微生理震颤与亚像素漂移。
+        """
+        try:
+            from core.perimeterx import solve_perimeterx_gate
+            return bool(solve_perimeterx_gate(page, timeout=timeout))
+        except Exception as e:
+            logger.debug(f"[CaptchaKit] PerimeterX 求解器调用异常: {e}")
+            return False
+
+    @staticmethod
+    def solve_whisper_audio(page: Any) -> Optional[str]:
+        """
+        从页面无障碍语音通道内生拉取音频流，并通过本地 Whisper INT8 模型极速听力转录。
+        """
+        try:
+            from core.audio_solver.solver import solve_audio_challenge
+            return solve_audio_challenge(page)
+        except Exception as e:
+            logger.debug(f"[CaptchaKit] Whisper 语音打码调用异常: {e}")
+            return None
+
+    @staticmethod
+    def solve_vision(page: Any, preset_or_spec: str) -> bool:
+        """
+        调用视觉验证码求解引擎（支持本地 ONNX / 端侧 VLM / 云端多模型投票）。
+        """
+        try:
+            from core.vision_solver import solve, CaptchaSpec
+            spec = CaptchaSpec.from_json(preset_or_spec)
+            import asyncio
+            if asyncio.iscoroutinefunction(solve):
+                import asyncio
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(solve(page, spec))
+            return bool(solve(page, spec))
+        except Exception as e:
+            logger.debug(f"[CaptchaKit] 视觉验证码求解器调用异常: {e}")
+            return False
+

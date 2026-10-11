@@ -74,12 +74,27 @@ def _resolve_node_executable() -> str:
     return "node.exe" if sys.platform.startswith("win") else "node"
 
 
-def _ensure_runner_environment() -> None:
-    """启动前的强制检查：runner.js / sdk.js 必须存在。"""
-    if not _RUNNER_PATH.exists():
-        raise FileNotFoundError(f"找不到 sentinel-runner.js: {_RUNNER_PATH}")
-    if not _SDK_PATH.exists():
-        raise FileNotFoundError(f"找不到 sdk.js: {_SDK_PATH}")
+def _ensure_runner_environment() -> bool:
+    """启动前检查：runner.js / sdk.js 必须存在，缺失返回 False。"""
+    return _RUNNER_PATH.exists() and _SDK_PATH.exists()
+
+
+def _fallback_pure_python(
+    challenge: dict,
+    flow: str,
+    device_id: str,
+    browser_profile: dict | None = None,
+) -> str:
+    """当 Node.js 或 runner 脚本异常时的纯 Python 原生 PoW 兜底方案。"""
+    logger.info(f"[SentinelRunner] 切换至纯 Python 原生 PoW 引擎 (core/sentinel.py), flow={flow}")
+    from core.sentinel import get_enforcement_token, build_sentinel_token_header
+    pow_data = challenge.get("proofofwork", {})
+    seed = pow_data.get("seed", "")
+    difficulty = pow_data.get("difficulty", "")
+    c_token = challenge.get("token", "")
+    turnstile_token = challenge.get("turnstile", {}).get("token", "")
+    p = get_enforcement_token(challenge, seed, difficulty, device_id, profile=browser_profile)
+    return build_sentinel_token_header(p, turnstile_token, c_token, device_id, flow)
 
 
 def generate_sentinel_token(
@@ -112,7 +127,9 @@ def generate_sentinel_token(
         FileNotFoundError: runner.js 或 sdk.js 缺失
         RuntimeError: Node 子进程异常或返回非零退出码
     """
-    _ensure_runner_environment()
+    if not _ensure_runner_environment():
+        logger.warning(f"[SentinelRunner] runner 环境未就绪，使用纯 Python PoW 引擎: flow={flow}")
+        return _fallback_pure_python(challenge, flow, device_id, browser_profile)
 
     if not flow:
         raise ValueError("flow 不能为空")
@@ -232,44 +249,32 @@ def generate_sentinel_token(
                 timeout=_RUNNER_TIMEOUT,
                 env=env,
             )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(
-                f"sentinel-runner.js 执行超时（>{_RUNNER_TIMEOUT}s），flow={flow}"
-            ) from exc
-        except FileNotFoundError as exc:
-            raise RuntimeError(
-                "未找到 Node 可执行文件，请确认已安装 Node.js 并加入 PATH，"
-                "或通过 NODE_EXECUTABLE 环境变量指定绝对路径。"
-            ) from exc
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as exc:
+            logger.warning(f"[SentinelRunner] 子进程执行异常 ({type(exc).__name__}: {exc})，降级到纯 Python PoW")
+            return _fallback_pure_python(challenge, flow, device_id, browser_profile)
 
         if proc.returncode != 0:
             stderr = (proc.stderr or "").strip()
             stdout = (proc.stdout or "").strip()
-            raise RuntimeError(
-                f"sentinel-runner.js 退出码 {proc.returncode}\n"
-                f"stderr: {stderr}\n"
-                f"stdout: {stdout}"
-            )
+            logger.warning(f"[SentinelRunner] runner 退出码 {proc.returncode}，降级到纯 Python PoW: stderr={stderr[:100]}")
+            return _fallback_pure_python(challenge, flow, device_id, browser_profile)
 
         token_text = (proc.stdout or "").strip()
         if not token_text:
-            raise RuntimeError(
-                f"sentinel-runner.js 输出为空, stderr: {(proc.stderr or '').strip()}"
-            )
+            logger.warning("[SentinelRunner] runner 输出为空，降级到纯 Python PoW")
+            return _fallback_pure_python(challenge, flow, device_id, browser_profile)
 
         # 简单合法性校验：必须是合法 JSON 且包含关键字段
         try:
             parsed = json.loads(token_text)
         except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"runner 输出不是合法 JSON: {token_text[:200]}"
-            ) from exc
+            logger.warning(f"[SentinelRunner] runner 输出非合法 JSON，降级到纯 Python PoW: {token_text[:100]}")
+            return _fallback_pure_python(challenge, flow, device_id, browser_profile)
 
         for required_key in ("p", "c", "id", "flow"):
             if required_key not in parsed:
-                raise RuntimeError(
-                    f"runner 输出缺少字段 {required_key}: {token_text[:200]}"
-                )
+                logger.warning(f"[SentinelRunner] runner 输出缺少 {required_key}，降级到纯 Python PoW")
+                return _fallback_pure_python(challenge, flow, device_id, browser_profile)
 
         # 详细诊断：打印输出 JSON 的所有顶层字段名 + 值长度
         field_summary = {

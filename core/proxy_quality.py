@@ -24,7 +24,7 @@ def clear_proxy_quality_cache() -> None:
 
 def check_proxy_health_and_fraud(
     proxy_url: Optional[str] = None,
-    timeout: float = 6.0,
+    timeout: float = 12.0,
 ) -> Dict[str, Any]:
     """通过指定的代理出口检测真实公网 IP、运营商 (ISP) 及机房/欺诈标签。
 

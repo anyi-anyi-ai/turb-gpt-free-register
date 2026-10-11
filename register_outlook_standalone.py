@@ -179,7 +179,7 @@ OUTPUT_DIR = "outlook_accounts"
 SCREENSHOT_DIR = "screenshots_outlook"
 
 # Registration timeout per account (seconds)
-REGISTER_TIMEOUT = 300
+REGISTER_TIMEOUT = int(os.environ.get("OUTLOOK_REGISTER_TIMEOUT", "600"))
 VERIFY_AFTER_REGISTER = True
 
 
@@ -249,7 +249,8 @@ def outlook_registration_terminal_state(url, text=""):
         "account.live.com",
         "outlook.live.com",
         "outlook.office.com",
-        "login.live.com/oauth20",
+        "login.live.com",
+        "kmsi",
     )):
         return "confirmed", "post_signup_url"
     if any(marker in page_text for marker in (
@@ -2241,10 +2242,10 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
         page.on("request", _log_request)
         page.on("response", _log_response)
         page.on("pageerror", lambda err: print(f"  {tag}[PAGE-ERR] {err}"))
-        print(f"  {tag} navigating via official Outlook client entry link...")
-        entry_url = "https://go.microsoft.com/fwlink/p/?linkid=2125440"
-        await _navigate_to_signup(page, entry_url, tag)
-        for _wait_landing in range(30):
+        print(f"  {tag} navigating to signup page...")
+        signup_url = _microsoft_url_with_locale("https://signup.live.com/signup?lic=1")
+        await _navigate_to_signup(page, signup_url, tag)
+        for _wait_landing in range(20):
             if "signup.live.com" in page.url.lower():
                 try:
                     if await _signup_email_input(page).count() > 0:
@@ -2307,7 +2308,7 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
         # Step 1: Enter email
         email_ok = False
         email_input = None
-        for _wait_inp in range(25):
+        for _wait_inp in range(60):
             candidate = _signup_email_input(page)
             try:
                 if await candidate.count() > 0 and await candidate.is_visible():
@@ -2315,10 +2316,19 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
                     break
             except Exception:
                 pass
+            if _wait_inp == 30:
+                print(f"  {tag} waiting for signup email input mounting (30s)...")
+                try:
+                    is_blank = await page.evaluate("() => !document.body || (document.body.innerText || '').trim().length < 5")
+                    if is_blank:
+                        print(f"  {tag} page appears blank after 30s, issuing page.reload()...")
+                        await page.reload(wait_until="domcontentloaded", timeout=30000)
+                except Exception:
+                    pass
             await asyncio.sleep(1)
 
         if not email_input:
-            print(f"  {tag} email input not found")
+            print(f"  {tag} email input not found after 60s")
             await _safe_screenshot(page, f"{SCREENSHOT_DIR}/outlook_{idx}_no_email.png")
             return None, None
 
@@ -2928,7 +2938,19 @@ async def register_outlook(page, context, idx=0, captcha_early_abort=False):
                     press_count += 1
                     pressed = True
                     had_captcha = True   # 出现过 captcha，供「消失=已通过」判定使用
-                    await asyncio.sleep(random.uniform(2, 4))
+                    if hold_result.get("passed"):
+                        print(f"  {tag} PerimeterX 长按判定已通过，捕获 _px3 凭证，进入 60s 快速推进窗口...")
+                        for sel in ['#iSignupAction', 'input[type="submit"]', 'button[type="submit"]']:
+                            try:
+                                b = page.locator(sel).first
+                                if await b.count() > 0 and await b.is_visible():
+                                    await b.click(timeout=3000)
+                                    break
+                            except Exception:
+                                pass
+                        await asyncio.sleep(1)
+                    else:
+                        await asyncio.sleep(random.uniform(2, 4))
 
                     try:
                         await _safe_screenshot(
@@ -3863,7 +3885,7 @@ async def main():
     parser.add_argument("--concurrency", "-c", type=int, default=2, help="Parallel registrations")
     parser.add_argument("--proxy-file", "-p", type=str, help="Proxy file (one per line: user:pass@host:port)")
     parser.add_argument("--no-proxy", action="store_true", default=False, help="No proxy")
-    parser.add_argument("--timeout", "-t", type=int, default=300, help="Per-account timeout (seconds)")
+    parser.add_argument("--timeout", "-t", type=int, default=int(os.environ.get("OUTLOOK_REGISTER_TIMEOUT", "600")), help="Per-account timeout (seconds)")
     parser.add_argument("--mode", "-m", type=str, default="auto",
                         choices=["auto", "protocol", "headless", "browser", "cloak"],
                         help="auto=protocol→headless→browser fallback; or fix to one mode")

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import random
 import time
 from typing import Any, Dict, Optional, Tuple
@@ -173,21 +174,37 @@ async def press_and_hold(page: Any, *, label: str = "", press_number: int = 1):
 
         await page.mouse.down()
         start_t = time.monotonic()
+        drift_x, drift_y = 0.0, 0.0
+        step_idx = 0
 
         while time.monotonic() - start_t < max_hold:
-            tremor_x = cx + random.uniform(-1.3, 1.3)
-            tremor_y = cy + random.uniform(-1.3, 1.3)
-            await page.mouse.move(tremor_x, tremor_y)
-            await asyncio.sleep(0.4)
+            step_idx += 1
+            t_now = time.monotonic() - start_t
+            # 8~12Hz 生理共振主频 + 高频衰减正弦微颤
+            freq = random.uniform(8.5, 11.5)
+            tremor_amp = 0.8 * math.exp(-0.05 * t_now)
+            sine_drift = tremor_amp * math.sin(2 * math.pi * freq * t_now)
 
-            # 提前检测是否已放行
-            if not await captcha_visible(page):
-                passed = True
-                break
+            # 亚像素布朗运动微步
+            drift_x = max(-1.2, min(1.2, drift_x + random.uniform(-0.15, 0.15)))
+            drift_y = max(-1.2, min(1.2, drift_y + random.uniform(-0.15, 0.15)))
+
+            cur_x = cx + drift_x + sine_drift
+            cur_y = cy + drift_y + sine_drift * random.uniform(0.6, 1.0)
+            await page.mouse.move(cur_x, cur_y)
+
+            # 8~12Hz 采样间隔 (40~70ms)
+            await asyncio.sleep(random.uniform(0.04, 0.07))
+
+            # 每隔约 250ms (4~5步) 检查一次是否已放行，避免过频造成卡顿
+            if step_idx % 5 == 0:
+                if not await captcha_visible(page):
+                    passed = True
+                    break
 
         held = round(time.monotonic() - start_t, 1)
         await page.mouse.up()
-        await asyncio.sleep(random.uniform(0.5, 1.0))
+        await asyncio.sleep(random.uniform(0.2, 0.5))
         if not passed:
             passed = not await captcha_visible(page)
     except Exception as exc:

@@ -132,6 +132,7 @@ class CloakBrowserHandle:
         try:
             await context.add_init_script("""
                 (() => {
+                    // 1. Storage sandbox fallback for cross-origin iframes
                     function patchStorage(type) {
                         try {
                             const s = window[type];
@@ -157,6 +158,104 @@ class CloakBrowserHandle:
                     }
                     patchStorage('sessionStorage');
                     patchStorage('localStorage');
+
+                    // 2. userAgentData polyfill (matches HTTP Sec-CH-UA headers)
+                    if (!navigator.userAgentData) {
+                        const brands = [
+                            { brand: "Chromium", version: "146" },
+                            { brand: "Not-A.Brand", version: "24" },
+                            { brand: "Google Chrome", version: "146" }
+                        ];
+                        const uad = {
+                            brands: brands,
+                            mobile: false,
+                            platform: "Windows",
+                            getHighEntropyValues: async (hints) => {
+                                const values = {
+                                    architecture: "x86",
+                                    bitness: "64",
+                                    brands: brands,
+                                    fullVersionList: [
+                                        { brand: "Chromium", version: "146.0.0.0" },
+                                        { brand: "Not-A.Brand", version: "24.0.0.0" },
+                                        { brand: "Google Chrome", version: "146.0.0.0" }
+                                    ],
+                                    mobile: false,
+                                    model: "",
+                                    platform: "Windows",
+                                    platformVersion: "15.0.0",
+                                    uaFullVersion: "146.0.0.0"
+                                };
+                                const res = {};
+                                for (const h of hints || []) {
+                                    if (h in values) res[h] = values[h];
+                                }
+                                return res;
+                            },
+                            toJSON: function() {
+                                return { brands: this.brands, mobile: this.mobile, platform: this.platform };
+                            }
+                        };
+                        try {
+                            Object.defineProperty(Object.getPrototypeOf(navigator), 'userAgentData', {
+                                get: () => uad,
+                                configurable: true,
+                                enumerable: true
+                            });
+                        } catch (_) {
+                            try {
+                                Object.defineProperty(navigator, 'userAgentData', {
+                                    get: () => uad,
+                                    configurable: true,
+                                    enumerable: true
+                                });
+                            } catch (_) {}
+                        }
+                    }
+
+                    // 3. deviceMemory polyfill (genuine desktop standard)
+                    if (!navigator.deviceMemory) {
+                        try {
+                            Object.defineProperty(Object.getPrototypeOf(navigator), 'deviceMemory', {
+                                get: () => 8,
+                                configurable: true,
+                                enumerable: true
+                            });
+                        } catch (_) {
+                            try {
+                                Object.defineProperty(navigator, 'deviceMemory', {
+                                    get: () => 8,
+                                    configurable: true,
+                                    enumerable: true
+                                });
+                            } catch (_) {}
+                        }
+                    }
+
+                    // 4. Notification.permission ('default' instead of headless 'denied')
+                    if (window.Notification) {
+                        try {
+                            Object.defineProperty(Notification, 'permission', {
+                                get: () => 'default',
+                                configurable: true,
+                                enumerable: true
+                            });
+                        } catch (_) {}
+                    }
+
+                    // 5. window.chrome.runtime
+                    if (window.chrome && !window.chrome.runtime) {
+                        window.chrome.runtime = {
+                            OnInstalledReason: { CHROME_UPDATE: "chrome_update", INSTALL: "install", SHARED_MODULE_UPDATE: "shared_module_update", UPDATE: "update" },
+                            OnRestartRequiredReason: { APP_UPDATE: "app_update", OS_UPDATE: "os_update", PERIODIC: "periodic" },
+                            PlatformArch: { ARM: "arm", ARM64: "arm64", MIPS: "mips", MIPS64: "mips64", X86_32: "x86-32", X86_64: "x86-64" },
+                            PlatformNaclArch: { ARM: "arm", MIPS: "mips", MIPS64: "mips64", X86_32: "x86-32", X86_64: "x86-64" },
+                            PlatformOs: { ANDROID: "android", CROS: "cros", LINUX: "linux", MAC: "mac", OPENBSD: "openbsd", WIN: "win" },
+                            RequestUpdateCheckStatus: { NO_UPDATE: "no_update", THROTTLED: "throttled", UPDATE_AVAILABLE: "update_available" },
+                            connect: function() {},
+                            sendMessage: function() {}
+                        };
+                    }
                 })();
             """)
         except Exception:

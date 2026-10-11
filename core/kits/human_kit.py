@@ -81,3 +81,23 @@ class HumanKit:
         cls.sleep(0.15, 0.35)
         locator.click(force=force)
         cls.sleep(0.3, 0.8)
+
+    @classmethod
+    def press_and_hold(
+        cls,
+        page: Any,
+        locator_or_selector: Any,
+        duration_seconds: float = 4.5,
+        target_check_fn: Any = None,
+    ) -> bool:
+        """
+        专为 PerimeterX / HUMAN Security 'Press & Hold' 设计的生物力学长按：
+        注入 8~12Hz 生理微抖动、亚像素布朗漂移与非线性接触压力曲线。
+        """
+        return BiometricMouse.press_and_hold_sync(
+            page=page,
+            locator_or_selector=locator_or_selector,
+            duration_seconds=duration_seconds,
+            target_check_fn=target_check_fn,
+        )
+

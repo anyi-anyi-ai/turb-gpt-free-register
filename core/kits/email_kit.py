@@ -174,3 +174,28 @@ class EmailKit:
                 "total_active_emails": total_emails,
                 "unregistered_count": unregistered,
             }
+
+    @staticmethod
+    def audit_email_domain(email: str) -> bool:
+        """
+        DNS / 拓扑前置探测：验证邮箱域名是否存在合规解析，
+        杜绝因死域名/无效临时域名导致的平台直接风控拦截。
+        """
+        if not email or "@" not in email:
+            return False
+        domain = email.split("@")[-1].strip().lower()
+        if not domain:
+            return False
+        known_good = {
+            "outlook.com", "hotmail.com", "live.com", "msn.com",
+            "gmail.com", "yahoo.com", "icloud.com", "uned.es",
+        }
+        if domain in known_good:
+            return True
+        import socket
+        try:
+            socket.gethostbyname(domain)
+            return True
+        except Exception:
+            return False
+

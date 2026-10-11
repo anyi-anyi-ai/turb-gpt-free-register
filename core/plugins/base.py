@@ -104,6 +104,9 @@ class BaseSitePlugin(ABC):
         email = account_info.get("email", "").strip().lower()
         password = account_info.get("payload", {}).get("password") or self.generate_password()
 
+        if email and "@" in email and not self.kits.email.audit_email_domain(email):
+            logger.warning(f"[{self.id}] [邮箱域名预检] 警告: 邮箱 {email} 域名解析未就绪，请留意接收端连通性。")
+
         is_headless = self.default_headless if headless is None else headless
         # 如果该平台需要人机拼图交互，强制可视化窗口
         if self.requires_human and is_headless:
@@ -134,13 +137,19 @@ class BaseSitePlugin(ABC):
                 if not effective_proxy:
                     logger.error(f"[{self.id}] [前置代理池] 阻断: 未能分配到纯净粘性住宅节点，触发门禁熔断，禁止使用宿主直连！")
                     return RegistrationResult(
-                        success=False,
+                        ok=False,
                         platform=self.id,
                         email=email,
                         error="residential_proxy_required: 未能分配到合规的纯净粘性住宅节点，门禁已熔断阻断",
                     )
             except Exception as proxy_err:
                 logger.error(f"[{self.id}] [前置代理池] 接入粘性节点池异常: {proxy_err}")
+                return RegistrationResult(
+                    ok=False,
+                    platform=self.id,
+                    email=email,
+                    error=f"residential_proxy_required: 接入粘性节点池异常: {proxy_err}",
+                )
         else:
             try:
                 from core.proxy_quality import log_and_audit_proxy_gate

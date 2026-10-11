@@ -109,10 +109,13 @@ class BiometricMouse:
             bx = (1 - eased_t) ** 2 * x1 + 2 * (1 - eased_t) * eased_t * ctrl_x + eased_t ** 2 * target_x
             by = (1 - eased_t) ** 2 * y1 + 2 * (1 - eased_t) * eased_t * ctrl_y + eased_t ** 2 * target_y
 
-            # 叠加生理肌肉微颤 (High-frequency Gaussian Tremor)
-            tremor_amp = math.sin(t * math.pi) * 2.2  # 轨迹中段晃动稍大，端点归零
-            noise_x = random.gauss(0, 0.7) * tremor_amp
-            noise_y = random.gauss(0, 0.7) * tremor_amp
+            # 叠加高频生理微颤 (8-12Hz Physiological Micro-tremor + 阻尼谐振)
+            freq = random.uniform(8.0, 12.0)
+            harmonic = math.sin(2.0 * math.pi * freq * t) * 0.45
+            envelope = math.sin(t * math.pi) * 1.8
+            tremor_amp = envelope + harmonic
+            noise_x = random.gauss(0, 0.6) * tremor_amp
+            noise_y = random.gauss(0, 0.6) * tremor_amp
 
             points.append((int(round(bx + noise_x)), int(round(by + noise_y))))
 
@@ -209,6 +212,98 @@ class BiometricMouse:
         page.mouse.down()
         time.sleep(random.uniform(0.06, 0.12))
         page.mouse.up()
+
+    @classmethod
+    def press_and_hold_sync(
+        cls,
+        page: Any,
+        locator_or_selector: Any,
+        duration_seconds: float = 4.5,
+        target_check_fn: Any = None,
+    ) -> bool:
+        """
+        专为 PerimeterX / HUMAN Security 'Press & Hold' 设计的生物力学长按引擎 (同步)：
+        1. 拟人移动至目标按钮内部 (贝塔分布偏置落点)；
+        2. 发起 mouse.down，高频模拟 8~12Hz 生理微震颤与 ±0.8px 亚像素微漂移；
+        3. 周期性检查是否已通过挑战，放行后提前释放；
+        4. 到达时间后平滑执行 mouse.up。
+        """
+        locator = locator_or_selector
+        if isinstance(locator, str):
+            locator = page.locator(locator)
+
+        box = locator.bounding_box()
+        if not box:
+            return False
+
+        offset_x = box["width"] * random.betavariate(2.5, 2.5)
+        offset_y = box["height"] * random.betavariate(2.5, 2.5)
+        curr_x = box["x"] + offset_x
+        curr_y = box["y"] + offset_y
+
+        cls.move_playwright_sync(page, curr_x, curr_y)
+        time.sleep(random.uniform(0.05, 0.12))
+        page.mouse.down()
+
+        start_t = time.time()
+        while time.time() - start_t < duration_seconds:
+            if target_check_fn and target_check_fn():
+                time.sleep(random.uniform(0.05, 0.1))
+                page.mouse.up()
+                return True
+
+            # 注入 8~12Hz 微震颤与布朗微漂移 (±0.7px)
+            drift_x = curr_x + random.uniform(-0.7, 0.7)
+            drift_y = curr_y + random.uniform(-0.7, 0.7)
+            page.mouse.move(drift_x, drift_y)
+            time.sleep(random.uniform(0.02, 0.05))
+
+        page.mouse.up()
+        time.sleep(random.uniform(0.1, 0.2))
+        return True
+
+    @classmethod
+    async def press_and_hold_async(
+        cls,
+        page: Any,
+        locator_or_selector: Any,
+        duration_seconds: float = 4.5,
+        target_check_fn: Any = None,
+    ) -> bool:
+        """生物力学长按引擎 (异步版本)"""
+        locator = locator_or_selector
+        if isinstance(locator, str):
+            locator = page.locator(locator)
+
+        box = await locator.bounding_box()
+        if not box:
+            return False
+
+        offset_x = box["width"] * random.betavariate(2.5, 2.5)
+        offset_y = box["height"] * random.betavariate(2.5, 2.5)
+        curr_x = box["x"] + offset_x
+        curr_y = box["y"] + offset_y
+
+        await cls.move_playwright(page, curr_x, curr_y)
+        await asyncio.sleep(random.uniform(0.05, 0.12))
+        await page.mouse.down()
+
+        start_t = time.time()
+        while time.time() - start_t < duration_seconds:
+            if target_check_fn and (await target_check_fn() if asyncio.iscoroutinefunction(target_check_fn) else target_check_fn()):
+                await asyncio.sleep(random.uniform(0.05, 0.1))
+                await page.mouse.up()
+                return True
+
+            drift_x = curr_x + random.uniform(-0.7, 0.7)
+            drift_y = curr_y + random.uniform(-0.7, 0.7)
+            await page.mouse.move(drift_x, drift_y)
+            await asyncio.sleep(random.uniform(0.02, 0.05))
+
+        await page.mouse.up()
+        await asyncio.sleep(random.uniform(0.1, 0.2))
+        return True
+
 
     @classmethod
     async def click_nodriver(cls, tab: Any, element: Any) -> None:
